@@ -121,7 +121,7 @@ final class MenuBarController: NSObject {
     }
 
     private func handleHotKey(_ action: HotKeyManager.Action) {
-        guard AccessibilityPermission.isTrusted(prompt: true) else {
+        guard AccessibilityPermission.isTrusted(prompt: false) else {
             present(.needAccessibility)
             rebuildMenu()
             return
@@ -164,8 +164,8 @@ final class MenuBarController: NSObject {
     private func present(_ message: TilerMessage) {
         switch message {
         case .needAccessibility:
-            notify("需要辅助功能权限", "系统设置里关掉再打开 MacTiler，然后重试。")
-            AccessibilityPermission.openSystemSettings()
+            notify("需要辅助功能权限", "开关看着开着也请关掉再打开 MacTiler，然后重试。")
+            AccessibilityPermission.openSystemSettingsIfNeeded()
         case .unsupportedWindow:
             notify("部分窗口无法调整", "已跳过不支持 set frame 的窗口。")
         case .tooManyWindows(let max):
@@ -187,6 +187,7 @@ final class MenuBarController: NSObject {
     }
 
     @objc private func openAccessibility() {
+        // Explicit user action: allow prompt + open without throttle.
         AccessibilityPermission.openSystemSettings()
         _ = AccessibilityPermission.isTrusted(prompt: true)
     }

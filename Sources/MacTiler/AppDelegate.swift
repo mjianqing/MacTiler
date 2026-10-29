@@ -22,8 +22,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         dragSwapMonitor = DragSwapMonitor()
         dragSwapMonitor?.start()
 
-        if !AccessibilityPermission.isTrusted(prompt: true) {
-            AccessibilityPermission.openSystemSettings()
+        // Never prompt:true or unconditionally open Settings on launch.
+        // Ad-hoc re-sign flips CDHash → TCC list can look "on" while AXIsProcessTrusted is false.
+        if !AccessibilityPermission.isTrusted(prompt: false) {
+            NotificationPoster.post(
+                title: "需要辅助功能",
+                body: "开关看着开着也请关掉再打开 MacTiler"
+            )
+            AccessibilityPermission.openSystemSettingsIfNeeded()
         }
 
         if smokeRetileAndQuit {
