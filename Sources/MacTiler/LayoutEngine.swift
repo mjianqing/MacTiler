@@ -3,8 +3,11 @@ import CoreGraphics
 
 struct LayoutEngine {
     /// Vertical-strip tiles L→R inside AppKit `workArea` (PRD v1.2).
-    /// Strip widths are integerized (floor); the last strip eats the remainder so
-    /// targets never overlap and never leave a sub-pixel gap.
+    /// Slot count comes from the strategy, not from how many windows are visible:
+    /// fewer windows only fill the leading slots; empty slots stay empty (never
+    /// collapse the sole window to the full workArea).
+    /// Strip widths are integerized (floor); the last *strategy* strip eats the
+    /// remainder so full layouts never overlap or leave a sub-pixel gap.
     static func frames(
         strategy: StrategyID,
         windowCount: Int,
@@ -13,12 +16,10 @@ struct LayoutEngine {
         guard windowCount > 0 else {
             return ([], strategy, nil)
         }
-        if windowCount == 1 {
-            return ([workArea], strategy, nil)
-        }
 
         var effective = strategy
         var overflow: Int? = nil
+        // With exactly 2 windows, 3-slot strategies degrade to two-halves.
         if windowCount == 2 && strategy != .twoHalves {
             effective = .twoHalves
         }
@@ -26,38 +27,26 @@ struct LayoutEngine {
             overflow = effective.maxWindows
         }
 
-        let count = min(windowCount, effective.maxWindows)
-        let fractions: [CGFloat]
-        switch effective {
-        case .twoHalves:
-            fractions = [0.5, 0.5]
-        case .threeThirds:
-            fractions = [1.0/3, 1.0/3, 1.0/3]
-        case .quartersQuartersHalf:
-            fractions = [0.25, 0.25, 0.5]
-        case .halfQuartersQuarters:
-            fractions = [0.5, 0.25, 0.25]
-        case .quarterHalfQuarter:
-            fractions = [0.25, 0.5, 0.25]
-        }
-
-        return (verticalStrips(workArea: workArea, fractions: fractions, count: count), effective, overflow)
+        let fractions = effective.stripFractions
+        let allSlots = verticalStrips(workArea: workArea, fractions: fractions)
+        let count = min(windowCount, allSlots.count)
+        return (Array(allSlots.prefix(count)), effective, overflow)
     }
 
-    private static func verticalStrips(workArea: CGRect, fractions: [CGFloat], count: Int) -> [CGRect] {
+    /// Lay out every strategy strip. Last strip absorbs flooring remainder of workArea.
+    private static func verticalStrips(workArea: CGRect, fractions: [CGFloat]) -> [CGRect] {
         var rects: [CGRect] = []
-        // Snap origin/height to whole points to avoid sub-pixel AX writes.
         let y = floor(workArea.minY)
         let height = max(1, floor(workArea.height))
         var x = floor(workArea.minX)
         let maxX = floor(workArea.maxX)
         let totalW = max(1, maxX - x)
-        let n = min(count, fractions.count)
+        let n = fractions.count
         for i in 0..<n {
             let isLast = (i == n - 1)
             let width: CGFloat
             if isLast {
-                width = max(1, maxX - x) // remainder — guarantees abut, no overlap
+                width = max(1, maxX - x)
             } else {
                 width = max(1, floor(totalW * fractions[i]))
             }

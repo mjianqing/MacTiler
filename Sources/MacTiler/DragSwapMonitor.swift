@@ -191,9 +191,9 @@ final class DragSwapMonitor {
         for name in attrs {
             ref = nil
             guard AXUIElementCopyAttributeValue(win, name as CFString, &ref) == .success,
-                  let el = ref else { continue }
-            // Bridged AXUIElement
-            let titleEl = (el as! AXUIElement)
+                  let el = ref,
+                  CFGetTypeID(el) == AXUIElementGetTypeID() else { continue }
+            let titleEl = el as! AXUIElement
             guard var rect = WindowTiler.shared.appKitFrame(of: titleEl) else { continue }
             // Expand vertically a bit so traffic-lights row still counts if only text node returned.
             let pad: CGFloat = 8

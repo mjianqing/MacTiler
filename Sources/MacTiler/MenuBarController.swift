@@ -4,6 +4,8 @@ final class MenuBarController: NSObject {
     private let statusItem: NSStatusItem
     private let hotKeys = HotKeyManager()
     private var axObserverTimer: Timer?
+    /// Skip full menu rebuild when AX/pause/strategy/auto unchanged (timer polls every 2s).
+    private var lastMenuFingerprint: String = ""
 
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -16,7 +18,7 @@ final class MenuBarController: NSObject {
         }
         hotKeys.start()
         axObserverTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
-            self?.rebuildMenu()
+            self?.refreshMenuIfNeeded()
         }
     }
 
@@ -37,11 +39,26 @@ final class MenuBarController: NSObject {
         }
     }
 
+    private func menuFingerprint(trusted: Bool, store: StrategyStore, strategy: StrategyID) -> String {
+        "\(trusted)|\(store.isPaused)|\(store.autoRetile)|\(strategy.rawValue)"
+    }
+
+    /// Timer path: only rebuild when relevant state flipped (avoids rewriting NSMenu every 2s).
+    private func refreshMenuIfNeeded() {
+        let trusted = AccessibilityPermission.isTrusted(prompt: false)
+        let store = StrategyStore.shared
+        let strategy = currentStrategy()
+        let fp = menuFingerprint(trusted: trusted, store: store, strategy: strategy)
+        guard fp != lastMenuFingerprint else { return }
+        rebuildMenu()
+    }
+
     private func rebuildMenu() {
         let menu = NSMenu()
         let trusted = AccessibilityPermission.isTrusted(prompt: false)
         let store = StrategyStore.shared
         let strategy = currentStrategy()
+        lastMenuFingerprint = menuFingerprint(trusted: trusted, store: store, strategy: strategy)
 
         // Header: wireframe + short status (no fraction text)
         let titleItem = NSMenuItem(

@@ -244,14 +244,19 @@ final class WindowTiler {
             TilerLog.info("redistribute after clamp desired=\(desired.map { Int($0) }) clamped=\(clamped)")
 
             // Pass 2: lay out L→R with new desired widths.
+            // Only eat remainder to workArea.maxX when targets already span the full
+            // workArea (all strategy slots filled). Otherwise keep empty slots empty —
+            // never inflate the last placed window into unused strip space.
+            let targetsSpanFull = abs(targets.reduce(CGFloat(0)) { $0 + $1.width } - workArea.width) <= 2
             var x = floor(workArea.minX)
             let maxX = floor(workArea.maxX)
             for i in 0..<n {
+                let remainW = max(1, maxX - x)
                 let w: CGFloat
-                if i == n - 1 {
-                    w = max(1, maxX - x)
+                if targetsSpanFull && i == n - 1 {
+                    w = remainW
                 } else {
-                    w = max(1, floor(desired[i]))
+                    w = max(1, min(floor(desired[i]), remainW))
                 }
                 let frame = CGRect(x: x, y: workArea.minY, width: w, height: workArea.height)
                 let outcome = setFrame(windows[i].element, appKitFrame: frame, title: windows[i].title + "/redist", workAreaWidth: workArea.width)
@@ -419,18 +424,6 @@ final class WindowTiler {
         return (placed, bad)
     }
 
-    /// Focused window's screen → else frontmost window's screen → main.
-    private func resolveTargetScreen(from windows: [ManagedWindow]) -> NSScreen? {
-        if let focused = windows.first(where: { $0.isFocused }),
-           let s = screenContaining(focused.frame) {
-            return s
-        }
-        if let first = windows.first, let s = screenContaining(first.frame) {
-            return s
-        }
-        return NSScreen.main
-    }
-
     private func windowBelongs(to screen: NSScreen, frame: CGRect) -> Bool {
         let center = CGPoint(x: frame.midX, y: frame.midY)
         guard NSMouseInRect(center, screen.frame, false) else { return false }
@@ -549,10 +542,17 @@ final class WindowTiler {
               AXUIElementCopyAttributeValue(win, kAXSizeAttribute as CFString, &sizeRef) == .success else {
             return nil
         }
+        guard CFGetTypeID(posRef) == AXValueGetTypeID(),
+              CFGetTypeID(sizeRef) == AXValueGetTypeID() else {
+            return nil
+        }
+        // CFGetTypeID already verified; forced cast is then safe.
+        let posVal = posRef as! AXValue
+        let sizeVal = sizeRef as! AXValue
         var point = CGPoint.zero
         var size = CGSize.zero
-        guard AXValueGetValue(posRef as! AXValue, .cgPoint, &point),
-              AXValueGetValue(sizeRef as! AXValue, .cgSize, &size) else {
+        guard AXValueGetValue(posVal, .cgPoint, &point),
+              AXValueGetValue(sizeVal, .cgSize, &size) else {
             return nil
         }
         return CGRect(origin: point, size: size)
