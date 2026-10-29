@@ -40,7 +40,7 @@ final class MenuBarController: NSObject {
         titleItem.isEnabled = false
         menu.addItem(titleItem)
 
-        let hint = NSMenuItem(title: "仅当前策略 · 不记各桌面", action: nil, keyEquivalent: "")
+        let hint = NSMenuItem(title: "竖条布局 · 拖窗可互换 · 不记各桌面", action: nil, keyEquivalent: "")
         hint.isEnabled = false
         menu.addItem(hint)
 
@@ -74,15 +74,6 @@ final class MenuBarController: NSObject {
         }
 
         menu.addItem(NSMenuItem.separator())
-
-        let mirror = NSMenuItem(
-            title: store.halfOnLeft ? "半屏在左（点此切到右）" : "半屏在右（点此切到左）",
-            action: #selector(toggleMirror),
-            keyEquivalent: "\\"
-        )
-        mirror.keyEquivalentModifierMask = [.control, .option, .command]
-        mirror.target = self
-        menu.addItem(mirror)
 
         let auto = NSMenuItem(title: "自动重排", action: #selector(toggleAuto), keyEquivalent: "")
         auto.state = store.autoRetile ? .on : .off
@@ -127,24 +118,25 @@ final class MenuBarController: NSObject {
             store.setStrategy(next)
             present(WindowTiler.shared.retile(strategy: next))
         case .strategy2:
-            store.setStrategy(.twoHalves)
-            present(WindowTiler.shared.retile(strategy: .twoHalves))
+            apply(.twoHalves)
         case .strategy3:
-            store.setStrategy(.threeThirds)
-            present(WindowTiler.shared.retile(strategy: .threeThirds))
+            apply(.threeThirds)
         case .strategy4:
-            store.setStrategy(.halfTwoQuarters)
-            present(WindowTiler.shared.retile(strategy: .halfTwoQuarters))
+            apply(.quartersQuartersHalf)
+        case .strategy5:
+            apply(.halfQuartersQuarters)
+        case .strategy6:
+            apply(.quarterHalfQuarter)
         case .pause:
             store.isPaused.toggle()
             present(store.isPaused ? .paused : .info("已恢复"))
-        case .mirror:
-            store.halfOnLeft.toggle()
-            if currentStrategy() == .halfTwoQuarters && !store.isPaused {
-                present(WindowTiler.shared.retile())
-            }
         }
         rebuildMenu()
+    }
+
+    private func apply(_ s: StrategyID) {
+        StrategyStore.shared.setStrategy(s)
+        present(WindowTiler.shared.retile(strategy: s))
     }
 
     private func present(_ message: TilerMessage) {
@@ -180,17 +172,10 @@ final class MenuBarController: NSObject {
     }
 
     @objc private func selectStrategy(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String, let s = StrategyID(rawValue: raw) else { return }
+        guard let raw = sender.representedObject as? String else { return }
+        let s = StrategyID.migrated(from: raw)
         StrategyStore.shared.setStrategy(s)
         present(WindowTiler.shared.retile(strategy: s))
-        rebuildMenu()
-    }
-
-    @objc private func toggleMirror() {
-        StrategyStore.shared.halfOnLeft.toggle()
-        if currentStrategy() == .halfTwoQuarters {
-            present(WindowTiler.shared.retile())
-        }
         rebuildMenu()
     }
 

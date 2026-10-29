@@ -5,20 +5,24 @@ import ApplicationServices
 enum StrategyID: String, CaseIterable, Codable, Equatable {
     case twoHalves = "two-halves"
     case threeThirds = "three-thirds"
-    case halfTwoQuarters = "half-two-quarters"
+    case quartersQuartersHalf = "quarters-quarters-half" // 1/4 | 1/4 | 1/2
+    case halfQuartersQuarters = "half-quarters-quarters" // 1/2 | 1/4 | 1/4
+    case quarterHalfQuarter = "quarter-half-quarter"     // 1/4 | 1/2 | 1/4
 
     var displayName: String {
         switch self {
-        case .twoHalves: return "1/2 + 1/2"
-        case .threeThirds: return "1/3 × 3"
-        case .halfTwoQuarters: return "1/2 + 1/4 + 1/4"
+        case .twoHalves: return "1/2 | 1/2"
+        case .threeThirds: return "1/3 | 1/3 | 1/3"
+        case .quartersQuartersHalf: return "1/4 | 1/4 | 1/2"
+        case .halfQuartersQuarters: return "1/2 | 1/4 | 1/4"
+        case .quarterHalfQuarter: return "1/4 | 1/2 | 1/4"
         }
     }
 
     var maxWindows: Int {
         switch self {
         case .twoHalves: return 2
-        case .threeThirds, .halfTwoQuarters: return 3
+        default: return 3
         }
     }
 
@@ -33,20 +37,32 @@ enum StrategyID: String, CaseIterable, Codable, Equatable {
         let idx = all.firstIndex(of: self) ?? 0
         return all[(idx - 1 + all.count) % all.count]
     }
+
+    /// Migrate legacy strategy ids from older prefs / interim names.
+    static func migrated(from raw: String) -> StrategyID {
+        if let s = StrategyID(rawValue: raw) { return s }
+        switch raw {
+        case "half-two-quarters", "half-left":
+            return .halfQuartersQuarters
+        case "quarters-left":
+            return .quartersQuartersHalf
+        case "half-center":
+            return .quarterHalfQuarter
+        default:
+            return .twoHalves
+        }
+    }
 }
 
-/// MVP prefs: one global current strategy; no per-Space / profile memory (PRD v1.1).
+/// PRD v1.2: one current strategy; no per-Space memory; no halfOnLeft mirror.
 struct AppPreferences: Codable, Equatable {
     var currentStrategy: String = StrategyID.twoHalves.rawValue
     var autoRetile: Bool = true
     var paused: Bool = false
-    /// For half-two-quarters: true = half on left; false = half on right
-    var halfOnLeft: Bool = true
-    /// MVP does not remember per-desktop strategy (Anna 2026-10-29).
     var spaceMemoryDisabled: Bool = true
 
     var strategy: StrategyID {
-        StrategyID(rawValue: currentStrategy) ?? .twoHalves
+        StrategyID.migrated(from: currentStrategy)
     }
 }
 

@@ -4,18 +4,20 @@ import UserNotifications
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBar: MenuBarController?
     private var autoRetileWatcher: AutoRetileWatcher?
+    private var dragSwapMonitor: DragSwapMonitor?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
 
-        // PRD v1.1: no per-Space / profile memory — only current strategy.
-        NSLog("MacTiler: MVP does not remember strategies per desktop (Anna 2026-10-29)")
+        NSLog("MacTiler: PRD v1.2 — five vertical strategies + drag swap; no per-desktop memory")
 
         menuBar = MenuBarController()
         autoRetileWatcher = AutoRetileWatcher()
         autoRetileWatcher?.start()
+        dragSwapMonitor = DragSwapMonitor()
+        dragSwapMonitor?.start()
 
         if !AccessibilityPermission.isTrusted(prompt: true) {
             AccessibilityPermission.openSystemSettings()
@@ -24,10 +26,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         autoRetileWatcher?.stop()
+        dragSwapMonitor?.stop()
     }
 }
 
-/// Lightweight auto-retile: when enabled, retile shortly after app activation / screen param changes.
 final class AutoRetileWatcher {
     private var tokens: [NSObjectProtocol] = []
     private var workItem: DispatchWorkItem?

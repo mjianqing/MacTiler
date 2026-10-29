@@ -13,21 +13,18 @@ final class StrategyStore {
             .appendingPathComponent("MacTiler", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         url = dir.appendingPathComponent("preferences.json")
+
         if let data = try? Data(contentsOf: url),
-           let decoded = try? JSONDecoder().decode(AppPreferences.self, from: data) {
-            preferences = decoded
-        } else if let data = try? Data(contentsOf: url),
-                  let legacy = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            // Migrate once from v0 profile-based prefs if present.
+           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             var prefs = AppPreferences()
-            if let s = legacy["currentStrategy"] as? String {
-                prefs.currentStrategy = s
-            } else if let s = legacy["defaultStrategy"] as? String {
-                prefs.currentStrategy = s
+            if let s = obj["currentStrategy"] as? String {
+                prefs.currentStrategy = StrategyID.migrated(from: s).rawValue
+            } else if let s = obj["defaultStrategy"] as? String {
+                prefs.currentStrategy = StrategyID.migrated(from: s).rawValue
             }
-            if let v = legacy["autoRetile"] as? Bool { prefs.autoRetile = v }
-            if let v = legacy["paused"] as? Bool { prefs.paused = v }
-            if let v = legacy["halfOnLeft"] as? Bool { prefs.halfOnLeft = v }
+            if let v = obj["autoRetile"] as? Bool { prefs.autoRetile = v }
+            if let v = obj["paused"] as? Bool { prefs.paused = v }
+            // drop halfOnLeft / profile fields
             preferences = prefs
             save()
         } else {
@@ -53,11 +50,6 @@ final class StrategyStore {
     var autoRetile: Bool {
         get { preferences.autoRetile }
         set { preferences.autoRetile = newValue }
-    }
-
-    var halfOnLeft: Bool {
-        get { preferences.halfOnLeft }
-        set { preferences.halfOnLeft = newValue }
     }
 
     var currentStrategy: StrategyID {

@@ -68,8 +68,7 @@ final class WindowTiler {
         let result = LayoutEngine.frames(
             strategy: chosen,
             windowCount: ordered.count,
-            workArea: workArea,
-            halfOnLeft: store.halfOnLeft
+            workArea: workArea
         )
 
         let toPlace = Array(ordered.prefix(result.frames.count))
@@ -243,5 +242,27 @@ final class WindowTiler {
         p = AXUIElementSetAttributeValue(win, kAXPositionAttribute as CFString, posVal)
 
         return p == .success && s == .success
+    }
+
+    // MARK: - Drag swap
+
+    /// Snapshot of manageable windows (AppKit frames).
+    func listManageableWindows() -> [ManagedWindow] {
+        collectManageableWindows()
+    }
+
+    /// Swap position+size of two windows (AppKit frames → AX).
+    @discardableResult
+    func swapFrames(a: AXUIElement, b: AXUIElement) -> Bool {
+        guard let frameA = getAppKitFrame(a), let frameB = getAppKitFrame(b) else { return false }
+        // Move A to a temp off-overlap spot first is unnecessary if we set both to each other's frames;
+        // set B first then A to reduce visual fighting when sizes differ.
+        let okB = setFrame(b, appKitFrame: frameA)
+        let okA = setFrame(a, appKitFrame: frameB)
+        return okA && okB
+    }
+
+    func appKitFrame(of win: AXUIElement) -> CGRect? {
+        getAppKitFrame(win)
     }
 }

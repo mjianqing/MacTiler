@@ -7,11 +7,12 @@ final class HotKeyManager {
         case retile = 1
         case prevStrategy = 2
         case nextStrategy = 3
-        case strategy2 = 4
-        case strategy3 = 5
-        case strategy4 = 6
-        case pause = 7
-        case mirror = 8
+        case strategy2 = 4          // two-halves
+        case strategy3 = 5          // three-thirds
+        case strategy4 = 6          // quarters-quarters-half
+        case strategy5 = 7          // half-quarters-quarters
+        case strategy6 = 8          // quarter-half-quarter
+        case pause = 9
     }
 
     var handler: ((Action) -> Void)?
@@ -35,17 +36,16 @@ final class HotKeyManager {
             return noErr
         }, 1, &eventType, userData, &eventHandler)
 
-        // modifiers: control + option + command
         let mods = UInt32(controlKey | optionKey | cmdKey)
-
         register(Action.retile, keyCode: UInt32(kVK_ANSI_R), modifiers: mods)
         register(Action.prevStrategy, keyCode: UInt32(kVK_ANSI_LeftBracket), modifiers: mods)
         register(Action.nextStrategy, keyCode: UInt32(kVK_ANSI_RightBracket), modifiers: mods)
         register(Action.strategy2, keyCode: UInt32(kVK_ANSI_2), modifiers: mods)
         register(Action.strategy3, keyCode: UInt32(kVK_ANSI_3), modifiers: mods)
         register(Action.strategy4, keyCode: UInt32(kVK_ANSI_4), modifiers: mods)
+        register(Action.strategy5, keyCode: UInt32(kVK_ANSI_5), modifiers: mods)
+        register(Action.strategy6, keyCode: UInt32(kVK_ANSI_6), modifiers: mods)
         register(Action.pause, keyCode: UInt32(kVK_ANSI_P), modifiers: mods)
-        register(Action.mirror, keyCode: UInt32(kVK_ANSI_Backslash), modifiers: mods)
     }
 
     func stop() {
@@ -70,7 +70,5 @@ final class HotKeyManager {
         }
     }
 
-    deinit {
-        stop()
-    }
+    deinit { stop() }
 }

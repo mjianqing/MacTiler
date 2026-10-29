@@ -13,6 +13,7 @@
 		3ED653A2E7C39B155DC9573E /* StrategyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F68B307B4C278B4B9F8F9583 /* StrategyStore.swift */; };
 		3F968B2DBA9920BAF118465A /* HotKeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BE704E9CCD28A48EDA0E066 /* HotKeyManager.swift */; };
 		48969C84A7F9D97E75F3154D /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02C349FC95B548EADEC4A278 /* Models.swift */; };
+		68C960FBA8CB769FFE71041A /* DragSwapMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCB764B8F754351E7D29B84D /* DragSwapMonitor.swift */; };
 		79FB226CD9EAE55926A259C4 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = A80F5EABE42B83446F2F49BF /* main.swift */; };
 		D42A4F127284C02A3FC0BC7F /* WindowTiler.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF1AA3CB59D85BFAF51E20BD /* WindowTiler.swift */; };
 		EA1B42B6A3A77D9990DB1487 /* NotificationPoster.swift in Sources */ = {isa = PBXBuildFile; fileRef = 475E749A4367D97982983AC6 /* NotificationPoster.swift */; };
@@ -29,6 +30,7 @@
 		6BE704E9CCD28A48EDA0E066 /* HotKeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotKeyManager.swift; sourceTree = "<group>"; };
 		8FCD9749DD3E35BFF6BF5860 /* AccessibilityPermission.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityPermission.swift; sourceTree = "<group>"; };
 		A80F5EABE42B83446F2F49BF /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		DCB764B8F754351E7D29B84D /* DragSwapMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DragSwapMonitor.swift; sourceTree = "<group>"; };
 		F68B307B4C278B4B9F8F9583 /* StrategyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrategyStore.swift; sourceTree = "<group>"; };
 		FF1AA3CB59D85BFAF51E20BD /* WindowTiler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowTiler.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -39,6 +41,7 @@
 			children = (
 				8FCD9749DD3E35BFF6BF5860 /* AccessibilityPermission.swift */,
 				62710522CE033227C6B8E443 /* AppDelegate.swift */,
+				DCB764B8F754351E7D29B84D /* DragSwapMonitor.swift */,
 				6BE704E9CCD28A48EDA0E066 /* HotKeyManager.swift */,
 				38C0B096AFF336C1ECD3AA88 /* LayoutEngine.swift */,
 				A80F5EABE42B83446F2F49BF /* main.swift */,
@@ -136,6 +139,7 @@
 			files = (
 				F40CE501D74D785CDC631A22 /* AccessibilityPermission.swift in Sources */,
 				26C445CB63F904AFD5141C1B /* AppDelegate.swift in Sources */,
+				68C960FBA8CB769FFE71041A /* DragSwapMonitor.swift in Sources */,
 				3F968B2DBA9920BAF118465A /* HotKeyManager.swift in Sources */,
 				097B062C40269FA56A1E92D3 /* LayoutEngine.swift in Sources */,
 				2DF2FE7FE7B3CDEBC687B7E4 /* MenuBarController.swift in Sources */,
