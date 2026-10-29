@@ -17,18 +17,13 @@ final class MenuBarController: NSObject {
             self?.handleHotKey(action)
         }
         hotKeys.start()
-        // Soft poll for AX grant so menu updates without restart
         axObserverTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             self?.rebuildMenu()
         }
     }
 
-    private func currentKey() -> String {
-        SpaceResolver.shared.currentKey()
-    }
-
     private func currentStrategy() -> StrategyID {
-        StrategyStore.shared.strategy(for: currentKey())
+        StrategyStore.shared.currentStrategy
     }
 
     private func rebuildMenu() {
@@ -36,17 +31,18 @@ final class MenuBarController: NSObject {
         let trusted = AccessibilityPermission.isTrusted(prompt: false)
         let store = StrategyStore.shared
         let strategy = currentStrategy()
-        let key = currentKey()
 
-        let titleItem = NSMenuItem(title: store.isPaused ? "MacTiler · 已暂停" : "MacTiler · \(strategy.displayName)", action: nil, keyEquivalent: "")
+        let titleItem = NSMenuItem(
+            title: store.isPaused ? "MacTiler · 已暂停" : "MacTiler · \(strategy.displayName)",
+            action: nil,
+            keyEquivalent: ""
+        )
         titleItem.isEnabled = false
         menu.addItem(titleItem)
 
-        let keyItem = NSMenuItem(title: SpaceResolver.shared.degraded
-            ? "档案: \(store.activeKey)（Space 识别已降级）"
-            : "Space: \(key)", action: nil, keyEquivalent: "")
-        keyItem.isEnabled = false
-        menu.addItem(keyItem)
+        let hint = NSMenuItem(title: "仅当前策略 · 不记各桌面", action: nil, keyEquivalent: "")
+        hint.isEnabled = false
+        menu.addItem(hint)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -54,9 +50,9 @@ final class MenuBarController: NSObject {
             let ax = NSMenuItem(title: "打开辅助功能设置…", action: #selector(openAccessibility), keyEquivalent: "")
             ax.target = self
             menu.addItem(ax)
-            let hint = NSMenuItem(title: "未授权：不会移动任何窗口", action: nil, keyEquivalent: "")
-            hint.isEnabled = false
-            menu.addItem(hint)
+            let noAuth = NSMenuItem(title: "未授权：不会移动任何窗口", action: nil, keyEquivalent: "")
+            noAuth.isEnabled = false
+            menu.addItem(noAuth)
             menu.addItem(NSMenuItem.separator())
         }
 
@@ -79,21 +75,11 @@ final class MenuBarController: NSObject {
 
         menu.addItem(NSMenuItem.separator())
 
-        if SpaceResolver.shared.degraded {
-            let profiles = NSMenuItem(title: "切换档案", action: nil, keyEquivalent: "")
-            let sub = NSMenu()
-            for name in store.preferences.profileNames {
-                let p = NSMenuItem(title: name, action: #selector(selectProfile(_:)), keyEquivalent: "")
-                p.representedObject = name
-                p.state = (name == store.activeKey) ? .on : .off
-                p.target = self
-                sub.addItem(p)
-            }
-            profiles.submenu = sub
-            menu.addItem(profiles)
-        }
-
-        let mirror = NSMenuItem(title: store.halfOnLeft ? "半屏在左（点此切到右）" : "半屏在右（点此切到左）", action: #selector(toggleMirror), keyEquivalent: "\\")
+        let mirror = NSMenuItem(
+            title: store.halfOnLeft ? "半屏在左（点此切到右）" : "半屏在右（点此切到左）",
+            action: #selector(toggleMirror),
+            keyEquivalent: "\\"
+        )
         mirror.keyEquivalentModifierMask = [.control, .option, .command]
         mirror.target = self
         menu.addItem(mirror)
@@ -103,7 +89,11 @@ final class MenuBarController: NSObject {
         auto.target = self
         menu.addItem(auto)
 
-        let pause = NSMenuItem(title: store.isPaused ? "恢复铺砖" : "暂停铺砖", action: #selector(togglePause), keyEquivalent: "p")
+        let pause = NSMenuItem(
+            title: store.isPaused ? "恢复铺砖" : "暂停铺砖",
+            action: #selector(togglePause),
+            keyEquivalent: "p"
+        )
         pause.keyEquivalentModifierMask = [.control, .option, .command]
         pause.target = self
         menu.addItem(pause)
@@ -124,27 +114,26 @@ final class MenuBarController: NSObject {
             return
         }
         let store = StrategyStore.shared
-        let key = currentKey()
 
         switch action {
         case .retile:
             present(WindowTiler.shared.retile())
         case .prevStrategy:
             let next = currentStrategy().previous()
-            store.setStrategy(next, for: key)
+            store.setStrategy(next)
             present(WindowTiler.shared.retile(strategy: next))
         case .nextStrategy:
             let next = currentStrategy().next()
-            store.setStrategy(next, for: key)
+            store.setStrategy(next)
             present(WindowTiler.shared.retile(strategy: next))
         case .strategy2:
-            store.setStrategy(.twoHalves, for: key)
+            store.setStrategy(.twoHalves)
             present(WindowTiler.shared.retile(strategy: .twoHalves))
         case .strategy3:
-            store.setStrategy(.threeThirds, for: key)
+            store.setStrategy(.threeThirds)
             present(WindowTiler.shared.retile(strategy: .threeThirds))
         case .strategy4:
-            store.setStrategy(.halfTwoQuarters, for: key)
+            store.setStrategy(.halfTwoQuarters)
             present(WindowTiler.shared.retile(strategy: .halfTwoQuarters))
         case .pause:
             store.isPaused.toggle()
@@ -177,11 +166,6 @@ final class MenuBarController: NSObject {
     }
 
     private func notify(_ title: String, _ body: String) {
-        importUserNotifications(title: title, body: body)
-    }
-
-    private func importUserNotifications(title: String, body: String) {
-        // Implemented via NotificationPoster to keep AppKit file clean.
         NotificationPoster.post(title: title, body: body)
     }
 
@@ -197,14 +181,8 @@ final class MenuBarController: NSObject {
 
     @objc private func selectStrategy(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String, let s = StrategyID(rawValue: raw) else { return }
-        StrategyStore.shared.setStrategy(s, for: currentKey())
+        StrategyStore.shared.setStrategy(s)
         present(WindowTiler.shared.retile(strategy: s))
-        rebuildMenu()
-    }
-
-    @objc private func selectProfile(_ sender: NSMenuItem) {
-        guard let name = sender.representedObject as? String else { return }
-        StrategyStore.shared.activeKey = name
         rebuildMenu()
     }
 

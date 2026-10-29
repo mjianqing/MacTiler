@@ -6,19 +6,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var autoRetileWatcher: AutoRetileWatcher?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-
-        // Ensure we stay as agent (also set LSUIElement in Info.plist)
         NSApp.setActivationPolicy(.accessory)
 
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
 
-        // Probe Space once and log degradation clearly.
-        _ = SpaceResolver.shared.currentKey()
-        if SpaceResolver.shared.degraded {
-            NSLog("MacTiler SPACE DEGRADED: \(SpaceResolver.shared.lastProbeNote)")
-        } else {
-            NSLog("MacTiler SPACE OK: \(SpaceResolver.shared.lastProbeNote)")
-        }
+        // PRD v1.1: no per-Space / profile memory — only current strategy.
+        NSLog("MacTiler: MVP does not remember strategies per desktop (Anna 2026-10-29)")
 
         menuBar = MenuBarController()
         autoRetileWatcher = AutoRetileWatcher()

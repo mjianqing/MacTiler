@@ -35,29 +35,18 @@ enum StrategyID: String, CaseIterable, Codable, Equatable {
     }
 }
 
+/// MVP prefs: one global current strategy; no per-Space / profile memory (PRD v1.1).
 struct AppPreferences: Codable, Equatable {
-    /// Named profile / space key → strategy
-    var strategiesByKey: [String: String] = [:]
+    var currentStrategy: String = StrategyID.twoHalves.rawValue
     var autoRetile: Bool = true
     var paused: Bool = false
     /// For half-two-quarters: true = half on left; false = half on right
     var halfOnLeft: Bool = true
-    var defaultStrategy: String = StrategyID.twoHalves.rawValue
-    /// Active named profile when Space id is unavailable
-    var activeProfileKey: String = "Default"
-    var profileNames: [String] = ["Default", "Coding", "Writing"]
-    /// true when we could not bind to real macOS Space ids
-    var spaceDetectionDegraded: Bool = true
+    /// MVP does not remember per-desktop strategy (Anna 2026-10-29).
+    var spaceMemoryDisabled: Bool = true
 
-    func strategy(for key: String) -> StrategyID {
-        if let raw = strategiesByKey[key], let s = StrategyID(rawValue: raw) {
-            return s
-        }
-        return StrategyID(rawValue: defaultStrategy) ?? .twoHalves
-    }
-
-    mutating func setStrategy(_ strategy: StrategyID, for key: String) {
-        strategiesByKey[key] = strategy.rawValue
+    var strategy: StrategyID {
+        StrategyID(rawValue: currentStrategy) ?? .twoHalves
     }
 }
 

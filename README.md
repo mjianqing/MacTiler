@@ -2,6 +2,8 @@
 
 macOS 原生菜单栏分屏 MVP（Swift + Accessibility）。不关 SIP，不做 Electron，不做自建工作区。
 
+按 **PRD v1.1**：只保留「当前一种比例 + 一键重排」；**不做**跨桌面记忆、**不做**命名档案。
+
 ## 编译运行
 
 ```bash
@@ -31,13 +33,11 @@ open build/Build/Products/Debug/MacTiler.app
 
 窗数不足时自动降级（2 窗→对半；1 窗→最大化）。第 4+ 窗不自动收进格子，并提示。
 
-## Space 记忆
+换桌面后若要不同比例，请手动改当前策略再重排——系统不记每个桌面。
 
-若公开 API 无法稳定识别 macOS Space id，会**降级为命名档案**（菜单里切换 Default / Coding / Writing），只对当前可见桌面上的窗口重排。详见交付说明。
-
-偏好保存在：`~/Library/Application Support/MacTiler/preferences.json`
+偏好：`~/Library/Application Support/MacTiler/preferences.json`
 
 ## Bundle
 
 - Bundle ID：`com.junmaly.mactiler`
-- Team：`G2B4QZWQN7`（与字幕 App 相同；若签名失败请在 Xcode 改 Team）
+- Team：`G2B4QZWQN7`

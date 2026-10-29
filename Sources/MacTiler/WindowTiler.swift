@@ -16,10 +16,9 @@ final class WindowTiler {
             return .paused
         }
 
-        let key = SpaceResolver.shared.currentKey()
-        let chosen = strategy ?? store.strategy(for: key)
+        let chosen = strategy ?? store.currentStrategy
         if let strategy {
-            store.setStrategy(strategy, for: key)
+            store.setStrategy(strategy)
         }
 
         let windows = collectManageableWindows()

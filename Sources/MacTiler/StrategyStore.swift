@@ -16,6 +16,20 @@ final class StrategyStore {
         if let data = try? Data(contentsOf: url),
            let decoded = try? JSONDecoder().decode(AppPreferences.self, from: data) {
             preferences = decoded
+        } else if let data = try? Data(contentsOf: url),
+                  let legacy = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            // Migrate once from v0 profile-based prefs if present.
+            var prefs = AppPreferences()
+            if let s = legacy["currentStrategy"] as? String {
+                prefs.currentStrategy = s
+            } else if let s = legacy["defaultStrategy"] as? String {
+                prefs.currentStrategy = s
+            }
+            if let v = legacy["autoRetile"] as? Bool { prefs.autoRetile = v }
+            if let v = legacy["paused"] as? Bool { prefs.paused = v }
+            if let v = legacy["halfOnLeft"] as? Bool { prefs.halfOnLeft = v }
+            preferences = prefs
+            save()
         } else {
             preferences = AppPreferences()
             save()
@@ -46,27 +60,12 @@ final class StrategyStore {
         set { preferences.halfOnLeft = newValue }
     }
 
-    var activeKey: String {
-        get { preferences.activeProfileKey }
-        set { preferences.activeProfileKey = newValue }
+    var currentStrategy: StrategyID {
+        get { preferences.strategy }
+        set { preferences.currentStrategy = newValue.rawValue }
     }
 
-    var spaceDetectionDegraded: Bool {
-        get { preferences.spaceDetectionDegraded }
-        set { preferences.spaceDetectionDegraded = newValue }
-    }
-
-    func strategy(for key: String) -> StrategyID {
-        preferences.strategy(for: key)
-    }
-
-    func setStrategy(_ strategy: StrategyID, for key: String) {
-        preferences.setStrategy(strategy, for: key)
-    }
-
-    func ensureProfile(_ name: String) {
-        if !preferences.profileNames.contains(name) {
-            preferences.profileNames.append(name)
-        }
+    func setStrategy(_ strategy: StrategyID) {
+        currentStrategy = strategy
     }
 }
