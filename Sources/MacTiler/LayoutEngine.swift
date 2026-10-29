@@ -3,6 +3,8 @@ import CoreGraphics
 
 struct LayoutEngine {
     /// Vertical-strip tiles L→R inside AppKit `workArea` (PRD v1.2).
+    /// Strip widths are integerized (floor); the last strip eats the remainder so
+    /// targets never overlap and never leave a sub-pixel gap.
     static func frames(
         strategy: StrategyID,
         windowCount: Int,
@@ -44,12 +46,22 @@ struct LayoutEngine {
 
     private static func verticalStrips(workArea: CGRect, fractions: [CGFloat], count: Int) -> [CGRect] {
         var rects: [CGRect] = []
-        var x = workArea.minX
+        // Snap origin/height to whole points to avoid sub-pixel AX writes.
+        let y = floor(workArea.minY)
+        let height = max(1, floor(workArea.height))
+        var x = floor(workArea.minX)
+        let maxX = floor(workArea.maxX)
+        let totalW = max(1, maxX - x)
         let n = min(count, fractions.count)
         for i in 0..<n {
             let isLast = (i == n - 1)
-            let width = isLast ? (workArea.maxX - x) : (workArea.width * fractions[i])
-            rects.append(CGRect(x: x, y: workArea.minY, width: width, height: workArea.height))
+            let width: CGFloat
+            if isLast {
+                width = max(1, maxX - x) // remainder — guarantees abut, no overlap
+            } else {
+                width = max(1, floor(totalW * fractions[i]))
+            }
+            rects.append(CGRect(x: x, y: y, width: width, height: height))
             x += width
         }
         return rects
