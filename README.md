@@ -44,7 +44,7 @@ open build/Build/Products/Debug/MacTiler.app
 
 ## 安装（DMG）
 
-1. 打开 `dist/MacTiler-0.1.3.dmg`，拖到「应用程序」。
+1. 打开 `dist/MacTiler-0.1.4.dmg`，拖到「应用程序」。
 2. 打开「应用程序 / MacTiler」（无 Dock 图标，看菜单栏右侧竖条线框）。
 3. **系统设置 → 隐私与安全性 → 辅助功能**：若列表里已有 MacTiler，先**关掉再打开**（换签/重装后 CDHash 变了必须重开）。
 4. 日志：`~/Library/Logs/MacTiler.log`（重排会写窗数与每个 setFrame 的 AXError）。

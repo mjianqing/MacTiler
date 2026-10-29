@@ -66,6 +66,8 @@ final class WindowTiler {
         var clampCompromised = false
         var hardFailReason: String? = nil
 
+        var skippedNonResizable = 0
+
         for screen in NSScreen.screens {
             let onScreen = all.filter { windowBelongs(to: screen, frame: $0.frame) }
             guard !onScreen.isEmpty else { continue }
@@ -77,18 +79,35 @@ final class WindowTiler {
             }
 
             let workArea = screen.visibleFrame
+
+            // P1: drop fully non-resizable windows before slotting — avoid misleading half-layouts.
+            var candidates: [ManagedWindow] = []
+            for w in ordered {
+                if isFullyNonResizable(w, workArea: workArea) {
+                    skippedNonResizable += 1
+                    skipped += 1
+                    TilerLog.info("nonResizable skip title=\(w.title.prefix(24)) screen=\(screen.localizedName)")
+                } else {
+                    candidates.append(w)
+                }
+            }
+            guard !candidates.isEmpty else {
+                TilerLog.info("screen=\(screen.localizedName) all windows non-resizable; skip screen")
+                continue
+            }
+
             let result = LayoutEngine.frames(
                 strategy: chosen,
-                windowCount: ordered.count,
+                windowCount: candidates.count,
                 workArea: workArea
             )
             if let max = result.overflowHint {
                 overflow = max
             }
 
-            let toPlace = Array(ordered.prefix(result.frames.count))
+            let toPlace = Array(candidates.prefix(result.frames.count))
             let targets = result.frames
-            TilerLog.info("screen=\(screen.localizedName) visible=\(workArea) windows=\(onScreen.count) placing=\(toPlace.count) targets=\(targets.map { "w=\(Int($0.width))" })")
+            TilerLog.info("screen=\(screen.localizedName) visible=\(workArea) windows=\(onScreen.count) candidates=\(candidates.count) placing=\(toPlace.count) targets=\(targets.map { "w=\(Int($0.width))" })")
 
             let screenResult = tileScreenRespectingMins(
                 windows: toPlace,
@@ -119,10 +138,16 @@ final class WindowTiler {
             return .info("部分窗口有最小尺寸，已尽量排布")
         }
         if totalPlaced == 0 && skipped > 0 {
+            if skippedNonResizable > 0 {
+                return .info("窗口无法调整尺寸，已跳过（未留下半布局）")
+            }
             return .unsupportedWindow
         }
         if let max = overflow {
             return .tooManyWindows(max: max)
+        }
+        if skippedNonResizable > 0 {
+            return .info("已重排 \(totalPlaced) 窗（跳过 \(skippedNonResizable) 个无法缩放）")
         }
         if skipped > 0 {
             return .info("已重排 \(totalPlaced) 窗（跳过 \(skipped)）")
@@ -238,12 +263,11 @@ final class WindowTiler {
                     clamped[i] = true
                     result.clampCompromised = true
                 }
-                x += after.width // advance by actual to avoid planning overlap
-                // But for next ideal x use planned if close:
+                // Advance by actual, never past workArea right edge.
                 if abs(after.width - w) <= tol {
-                    x = frame.maxX
+                    x = min(maxX, frame.maxX)
                 } else {
-                    x = floor(after.maxX)
+                    x = min(maxX, floor(after.maxX))
                 }
             }
         }
@@ -256,26 +280,39 @@ final class WindowTiler {
             return result
         }
 
-        if hasOverlap(frames) {
-            TilerLog.info("overlap after place — packing by actual widths L→R")
+        if hasOverlap(frames) || exceedsWorkArea(frames, workArea) {
+            TilerLog.info("overlap/overflow after place — packing by actual widths L→R clamped to workArea")
             var x = floor(workArea.minX)
             let maxX = floor(workArea.maxX)
             for i in 0..<n {
                 guard var actual = getAppKitFrame(windows[i].element) else { continue }
-                let w = (i == n - 1) ? max(1, maxX - x) : max(1, floor(actual.width))
+                let remain = maxX - x
+                if remain < 1 {
+                    TilerLog.info("pack stop at i=\(i) no remain")
+                    break
+                }
+                // P1: never plan past right edge — w = min(actualW, workArea.maxX - x)
+                let w = min(max(1, floor(actual.width)), remain)
                 let frame = CGRect(x: x, y: workArea.minY, width: w, height: workArea.height)
                 _ = setFrame(windows[i].element, appKitFrame: frame, title: windows[i].title + "/pack", workAreaWidth: workArea.width)
                 actual = getAppKitFrame(windows[i].element) ?? frame
-                x = floor(actual.maxX)
+                // If min-width still overflows, pin right edge (may overlap → fail visibly below)
+                if floor(actual.maxX) > maxX + 1 {
+                    let pinnedX = max(floor(workArea.minX), maxX - floor(actual.width))
+                    let pinned = CGRect(x: pinnedX, y: workArea.minY, width: floor(actual.width), height: workArea.height)
+                    _ = setFrame(windows[i].element, appKitFrame: pinned, title: windows[i].title + "/pack-pin", workAreaWidth: workArea.width)
+                    actual = getAppKitFrame(windows[i].element) ?? pinned
+                }
+                x = min(maxX, floor(actual.maxX))
                 result.clampCompromised = true
             }
             usleep(40_000)
             frames = windows.compactMap { getAppKitFrame($0.element) }
         }
 
-        if frames.count == n, hasOverlap(frames) {
+        if frames.count == n, hasOverlap(frames) || exceedsWorkArea(frames, workArea) {
             result.failReason = "部分窗口最小尺寸过大，无法无重叠排布"
-            TilerLog.error("overlap remains frames=\(frames.map { "x=\(Int($0.minX))w=\(Int($0.width))" })")
+            TilerLog.error("overlap/overflow remains frames=\(frames.map { "x=\(Int($0.minX))w=\(Int($0.width))" }) workMaxX=\(Int(workArea.maxX))")
             return result
         }
 
@@ -306,7 +343,46 @@ final class WindowTiler {
         return false
     }
 
+    /// True if any frame extends past the work-area right (or left) edge by >1pt.
+    private func exceedsWorkArea(_ frames: [CGRect], _ workArea: CGRect) -> Bool {
+        let maxX = floor(workArea.maxX)
+        let minX = floor(workArea.minX)
+        return frames.contains { floor($0.maxX) > maxX + 1 || floor($0.minX) < minX - 1 }
+    }
+
+    /// Probe: write a clearly different width; if width barely moves and stays far from target → fixed-size.
+    private func isFullyNonResizable(_ win: ManagedWindow, workArea: CGRect) -> Bool {
+        guard let before = getAppKitFrame(win.element) else { return false }
+        let tol = max(2, workArea.width * Self.widthTolFraction)
+        var probeW = floor(workArea.width * 0.5)
+        if abs(probeW - before.width) <= tol {
+            probeW = floor(min(workArea.width - 1, max(100, before.width + max(80, workArea.width * 0.1))))
+        }
+        if abs(probeW - before.width) <= tol {
+            probeW = floor(max(100, before.width * 0.5))
+        }
+        if abs(probeW - before.width) <= 2 {
+            return false // cannot construct a distinct probe
+        }
+        let probe = CGRect(
+            x: floor(before.origin.x),
+            y: workArea.minY,
+            width: max(1, probeW),
+            height: workArea.height
+        )
+        _ = setFrame(win.element, appKitFrame: probe, title: win.title + "/probe", workAreaWidth: workArea.width)
+        let after = getAppKitFrame(win.element) ?? before
+        let unchanged = abs(after.width - before.width) <= 2
+        let missed = abs(after.width - probeW) > tol
+        if unchanged && missed {
+            TilerLog.info("nonResizable title=\(win.title.prefix(24)) beforeW=\(Int(before.width)) probeW=\(Int(probeW)) afterW=\(Int(after.width))")
+            return true
+        }
+        return false
+    }
+
     /// Degrade: place as many as fit L→R without overlap given measured min widths.
+    /// Each strip width is clamped so maxX ≤ workArea.maxX.
     private func packFitting(
         windows: [ManagedWindow],
         minWidths: [CGFloat],
@@ -317,21 +393,30 @@ final class WindowTiler {
         var placed = 0
         for i in 0..<windows.count {
             let need = max(1, floor(minWidths[i]))
-            if x + need > maxX + 1 && i > 0 {
-                TilerLog.info("packFitting stop at i=\(i) need=\(need) remain=\(maxX - x)")
+            let remain = maxX - x
+            if remain < 1 { break }
+            if need > remain + 1 && i > 0 {
+                TilerLog.info("packFitting stop at i=\(i) need=\(need) remain=\(remain)")
                 break
             }
-            let w = (i == windows.count - 1 || x + need >= maxX) ? max(1, maxX - x) : need
-            let frame = CGRect(x: x, y: workArea.minY, width: w, height: workArea.height)
+            let w = min(need, remain) // P1: never past right edge
+            let frame = CGRect(x: x, y: workArea.minY, width: max(1, w), height: workArea.height)
             _ = setFrame(windows[i].element, appKitFrame: frame, title: windows[i].title + "/fit", workAreaWidth: workArea.width)
-            let after = getAppKitFrame(windows[i].element) ?? frame
-            x = floor(after.maxX)
+            var after = getAppKitFrame(windows[i].element) ?? frame
+            if floor(after.maxX) > maxX + 1 {
+                let pinnedX = max(floor(workArea.minX), maxX - floor(after.width))
+                let pinned = CGRect(x: pinnedX, y: workArea.minY, width: floor(after.width), height: workArea.height)
+                _ = setFrame(windows[i].element, appKitFrame: pinned, title: windows[i].title + "/fit-pin", workAreaWidth: workArea.width)
+                after = getAppKitFrame(windows[i].element) ?? pinned
+            }
+            x = min(maxX, floor(after.maxX))
             placed += 1
             if x >= maxX - 1 { break }
         }
         usleep(40_000)
-        let frames = windows.prefix(placed).compactMap { getAppKitFrame($0.element) }
-        return (placed, hasOverlap(frames))
+        let frames = Array(windows.prefix(placed).compactMap { getAppKitFrame($0.element) })
+        let bad = hasOverlap(frames) || exceedsWorkArea(frames, workArea)
+        return (placed, bad)
     }
 
     /// Focused window's screen → else frontmost window's screen → main.
