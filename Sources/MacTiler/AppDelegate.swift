@@ -5,13 +5,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBar: MenuBarController?
     private var autoRetileWatcher: AutoRetileWatcher?
     private var dragSwapMonitor: DragSwapMonitor?
+    var smokeRetileAndQuit = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, err in
+            TilerLog.info("UN authorization granted=\(granted) err=\(String(describing: err))")
+        }
 
-        NSLog("MacTiler: PRD v1.2 — five vertical strategies + drag swap; no per-desktop memory")
+        TilerLog.info("launch v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?") path=\(Bundle.main.bundlePath) trusted=\(AccessibilityPermission.isTrusted(prompt: false)) smoke=\(smokeRetileAndQuit)")
 
         menuBar = MenuBarController()
         autoRetileWatcher = AutoRetileWatcher()
@@ -22,11 +25,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !AccessibilityPermission.isTrusted(prompt: true) {
             AccessibilityPermission.openSystemSettings()
         }
+
+        if smokeRetileAndQuit {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                let msg = WindowTiler.shared.retile()
+                TilerLog.info("smoke-retile result=\(msg)")
+                // Give log queue a moment to flush
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    NSApp.terminate(nil)
+                }
+            }
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         autoRetileWatcher?.stop()
         dragSwapMonitor?.stop()
+        TilerLog.info("terminate")
     }
 }
 
@@ -59,6 +74,8 @@ final class AutoRetileWatcher {
         guard AccessibilityPermission.isTrusted(prompt: false) else { return }
         workItem?.cancel()
         let item = DispatchWorkItem {
+            // Auto-retile stays quiet on success to avoid notification spam;
+            // failures still log via WindowTiler.
             _ = WindowTiler.shared.retile()
         }
         workItem = item

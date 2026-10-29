@@ -80,5 +80,7 @@ enum TilerMessage: Equatable {
     case tooManyWindows(max: Int)
     case paused
     case info(String)
+    /// Successful retile — always presented (never silent).
+    case retiled(count: Int)
     case none
 }

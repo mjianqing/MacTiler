@@ -8,6 +8,7 @@ final class MenuBarController: NSObject {
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
+        NotificationPoster.statusItem = statusItem
         updateStatusIcon()
         rebuildMenu()
         hotKeys.handler = { [weak self] action in
@@ -25,6 +26,8 @@ final class MenuBarController: NSObject {
 
     private func updateStatusIcon() {
         guard let button = statusItem.button else { return }
+        // Don't clobber an active tip flash.
+        if !(button.title.isEmpty) && button.image == nil { return }
         let store = StrategyStore.shared
         if store.isPaused {
             button.image = NSImage(systemSymbolName: "pause.rectangle", accessibilityDescription: "MacTiler 已暂停")
@@ -161,7 +164,7 @@ final class MenuBarController: NSObject {
     private func present(_ message: TilerMessage) {
         switch message {
         case .needAccessibility:
-            notify("需要辅助功能权限", "请在系统设置中允许 MacTiler，然后重试。")
+            notify("需要辅助功能权限", "系统设置里关掉再打开 MacTiler，然后重试。")
             AccessibilityPermission.openSystemSettings()
         case .unsupportedWindow:
             notify("部分窗口无法调整", "已跳过不支持 set frame 的窗口。")
@@ -171,8 +174,11 @@ final class MenuBarController: NSObject {
             notify("已暂停", "暂停期间不会移动窗口。")
         case .info(let text):
             notify("MacTiler", text)
+        case .retiled(let count):
+            notify("已重排", "\(count) 个窗口")
         case .none:
-            break
+            // Should not be used for retile success anymore; still tip so never silent.
+            notify("MacTiler", "完成")
         }
     }
 

@@ -30,7 +30,11 @@ final class WindowTiler {
 
     @discardableResult
     func retile(strategy: StrategyID? = nil) -> TilerMessage {
-        guard AccessibilityPermission.isTrusted(prompt: false) else {
+        let trusted = AccessibilityPermission.isTrusted(prompt: false)
+        TilerLog.info("retile begin trusted=\(trusted) paused=\(StrategyStore.shared.isPaused) strategy=\((strategy ?? StrategyStore.shared.currentStrategy).rawValue) screens=\(NSScreen.screens.count)")
+
+        guard trusted else {
+            TilerLog.error("retile aborted: AX not trusted")
             return .needAccessibility
         }
         let store = StrategyStore.shared
@@ -44,48 +48,71 @@ final class WindowTiler {
         }
 
         let all = collectManageableWindows()
+        TilerLog.info("collectManageableWindows count=\(all.count): " + all.map { "[\($0.title.prefix(24))@\(Int($0.frame.midX)),\(Int($0.frame.midY)) foc=\($0.isFocused)]" }.joined(separator: " "))
         guard !all.isEmpty else {
             return .info("当前桌面没有可铺窗口")
         }
 
-        let screen = resolveTargetScreen(from: all) ?? NSScreen.main
-        guard let screen else {
-            return .info("找不到可用屏幕")
-        }
-
-        // Only tile windows whose center lies on the target screen (AppKit coords).
-        let onScreen = all.filter { windowBelongs(to: screen, frame: $0.frame) }
-        guard !onScreen.isEmpty else {
-            return .info("焦点屏上没有可铺窗口")
-        }
-
-        let ordered = onScreen.sorted { a, b in
-            if a.isFocused != b.isFocused { return a.isFocused && !b.isFocused }
-            return false
-        }
-
-        let workArea = screen.visibleFrame // AppKit
-        let result = LayoutEngine.frames(
-            strategy: chosen,
-            windowCount: ordered.count,
-            workArea: workArea
-        )
-
-        let toPlace = Array(ordered.prefix(result.frames.count))
+        // Tile every screen that has manageable windows (dual-monitor safe).
+        // Previously only "focus screen" — clicking the menu bar often left focus on the
+        // laptop while the user stared at the external display → apparent no-op.
+        var totalPlaced = 0
         var skipped = 0
-        for (win, frame) in zip(toPlace, result.frames) {
-            if !setFrame(win.element, appKitFrame: frame) {
-                skipped += 1
+        var overflow: Int? = nil
+        var screensTouched = 0
+        var sawAPIDisabled = false
+
+        for screen in NSScreen.screens {
+            let onScreen = all.filter { windowBelongs(to: screen, frame: $0.frame) }
+            guard !onScreen.isEmpty else { continue }
+            screensTouched += 1
+
+            let ordered = onScreen.sorted { a, b in
+                if a.isFocused != b.isFocused { return a.isFocused && !b.isFocused }
+                return false
+            }
+
+            let workArea = screen.visibleFrame
+            let result = LayoutEngine.frames(
+                strategy: chosen,
+                windowCount: ordered.count,
+                workArea: workArea
+            )
+            if let max = result.overflowHint {
+                overflow = max
+            }
+
+            let toPlace = Array(ordered.prefix(result.frames.count))
+            TilerLog.info("screen=\(screen.localizedName) visible=\(workArea) windows=\(onScreen.count) placing=\(toPlace.count)")
+
+            for (win, frame) in zip(toPlace, result.frames) {
+                let outcome = setFrame(win.element, appKitFrame: frame, title: win.title)
+                if outcome.apiDisabled { sawAPIDisabled = true }
+                if outcome.ok {
+                    totalPlaced += 1
+                } else {
+                    skipped += 1
+                }
             }
         }
 
-        if let max = result.overflowHint {
+        if screensTouched == 0 {
+            return .info("没有可铺窗口落在任何屏幕上")
+        }
+        if sawAPIDisabled {
+            TilerLog.error("AX APIDisabled — TCC grant stale for this CDHash; toggle Accessibility for MacTiler")
+            return .needAccessibility
+        }
+        if totalPlaced == 0 && skipped > 0 {
+            return .unsupportedWindow
+        }
+        if let max = overflow {
             return .tooManyWindows(max: max)
         }
         if skipped > 0 {
-            return .unsupportedWindow
+            return .info("已重排 \(totalPlaced) 窗（跳过 \(skipped)）")
         }
-        return .none
+        return .retiled(count: totalPlaced)
     }
 
     /// Focused window's screen → else frontmost window's screen → main.
@@ -122,8 +149,11 @@ final class WindowTiler {
             if app.bundleIdentifier == Bundle.main.bundleIdentifier { continue }
             let appEl = AXUIElementCreateApplication(app.processIdentifier)
             var windowsRef: CFTypeRef?
-            guard AXUIElementCopyAttributeValue(appEl, kAXWindowsAttribute as CFString, &windowsRef) == .success,
-                  let windowList = windowsRef as? [AXUIElement] else {
+            let copyErr = AXUIElementCopyAttributeValue(appEl, kAXWindowsAttribute as CFString, &windowsRef)
+            guard copyErr == .success, let windowList = windowsRef as? [AXUIElement] else {
+                if copyErr == .apiDisabled {
+                    TilerLog.error("kAXWindows APIDisabled for \(app.localizedName ?? "?") pid=\(app.processIdentifier)")
+                }
                 continue
             }
 
@@ -136,7 +166,7 @@ final class WindowTiler {
                 result.append(ManagedWindow(
                     element: win,
                     pid: app.processIdentifier,
-                    title: title,
+                    title: title.isEmpty ? (app.localizedName ?? "?") : title,
                     frame: appKitFrame,
                     isFocused: focused
                 ))
@@ -224,15 +254,21 @@ final class WindowTiler {
         return CGRect(origin: point, size: size)
     }
 
+    private struct SetFrameOutcome {
+        let ok: Bool
+        let apiDisabled: Bool
+    }
+
     /// `appKitFrame` is in AppKit coords; convert to AX before writing.
     @discardableResult
-    private func setFrame(_ win: AXUIElement, appKitFrame: CGRect) -> Bool {
+    private func setFrame(_ win: AXUIElement, appKitFrame: CGRect, title: String = "") -> SetFrameOutcome {
         let axFrame = WindowTiler.appKitToAX(appKitFrame)
         var origin = axFrame.origin
         var size = axFrame.size
         guard let posVal = AXValueCreate(.cgPoint, &origin),
               let sizeVal = AXValueCreate(.cgSize, &size) else {
-            return false
+            TilerLog.error("setFrame AXValueCreate failed title=\(title)")
+            return SetFrameOutcome(ok: false, apiDisabled: false)
         }
 
         // Size then position then size again — more reliable across apps.
@@ -241,7 +277,29 @@ final class WindowTiler {
         s = AXUIElementSetAttributeValue(win, kAXSizeAttribute as CFString, sizeVal)
         p = AXUIElementSetAttributeValue(win, kAXPositionAttribute as CFString, posVal)
 
-        return p == .success && s == .success
+        let apiDisabled = (p == .apiDisabled || s == .apiDisabled)
+        let ok = (p == .success && s == .success)
+
+        if ok {
+            // Verify — some apps return success but ignore the write.
+            usleep(30_000)
+            if let after = getAppKitFrame(win) {
+                let moved = hypot(after.midX - appKitFrame.midX, after.midY - appKitFrame.midY) > 8
+                    || abs(after.width - appKitFrame.width) > 8
+                    || abs(after.height - appKitFrame.height) > 8
+                // "Close enough" if within 40pt (title bar / traffic lights)
+                let close = abs(after.origin.x - appKitFrame.origin.x) < 40
+                    && abs(after.width - appKitFrame.width) < 40
+                    && abs(after.height - appKitFrame.height) < 80
+                TilerLog.info("setFrame OK title=\(title.prefix(32)) target=\(appKitFrame) after=\(after) close=\(close) moved=\(moved) p=\(p.rawValue) s=\(s.rawValue)")
+                return SetFrameOutcome(ok: close || moved, apiDisabled: false)
+            }
+            TilerLog.info("setFrame OK (no re-read) title=\(title.prefix(32)) p=\(p.rawValue) s=\(s.rawValue)")
+            return SetFrameOutcome(ok: true, apiDisabled: false)
+        }
+
+        TilerLog.error("setFrame FAIL title=\(title.prefix(32)) target=\(appKitFrame) ax=\(axFrame) p=\(p.rawValue) s=\(s.rawValue) apiDisabled=\(apiDisabled)")
+        return SetFrameOutcome(ok: false, apiDisabled: apiDisabled)
     }
 
     // MARK: - Drag swap
@@ -255,10 +313,8 @@ final class WindowTiler {
     @discardableResult
     func swapFrames(a: AXUIElement, b: AXUIElement) -> Bool {
         guard let frameA = getAppKitFrame(a), let frameB = getAppKitFrame(b) else { return false }
-        // Move A to a temp off-overlap spot first is unnecessary if we set both to each other's frames;
-        // set B first then A to reduce visual fighting when sizes differ.
-        let okB = setFrame(b, appKitFrame: frameA)
-        let okA = setFrame(a, appKitFrame: frameB)
+        let okB = setFrame(b, appKitFrame: frameA, title: "swap-B").ok
+        let okA = setFrame(a, appKitFrame: frameB, title: "swap-A").ok
         return okA && okB
     }
 
