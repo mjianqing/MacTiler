@@ -112,6 +112,12 @@ final class MenuBarController: NSObject {
 
         menu.addItem(NSMenuItem.separator())
 
+        let short = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+        let ver = NSMenuItem(title: "MacTiler \(short) (build \(build))", action: nil, keyEquivalent: "")
+        ver.isEnabled = false
+        menu.addItem(ver)
+
         let quit = NSMenuItem(title: "退出 MacTiler", action: #selector(quit), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
