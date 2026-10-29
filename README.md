@@ -15,13 +15,15 @@ open build/Build/Products/Debug/MacTiler.app
 
 ## 策略（左→右竖条）
 
-| id | 布局 |
-|----|------|
-| `two-halves` | 1/2 \| 1/2 |
-| `three-thirds` | 1/3 \| 1/3 \| 1/3 |
-| `quarters-quarters-half` | 1/4 \| 1/4 \| 1/2 |
-| `half-quarters-quarters` | 1/2 \| 1/4 \| 1/4 |
-| `quarter-half-quarter` | 1/4 \| 1/2 \| 1/4 |
+菜单用**竖条线框图标**示意（PRD v1.2.1），不写分数主文案；旁注快捷键 ⌃⌥⌘2…6。状态栏图标随当前布局切换。
+
+| 快捷键 | 线框含义 | id |
+|--------|----------|-----|
+| ⌃⌥⌘2 | 两等分 | `two-halves` |
+| ⌃⌥⌘3 | 三等分 | `three-thirds` |
+| ⌃⌥⌘4 | 窄\|窄\|宽 | `quarters-quarters-half` |
+| ⌃⌥⌘5 | 宽\|窄\|窄 | `half-quarters-quarters` |
+| ⌃⌥⌘6 | 窄\|宽\|窄 | `quarter-half-quarter` |
 
 已作废：`half-two-quarters`（半屏 + 上下两四分）。
 
