@@ -15,6 +15,7 @@
 		48969C84A7F9D97E75F3154D /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02C349FC95B548EADEC4A278 /* Models.swift */; };
 		68C960FBA8CB769FFE71041A /* DragSwapMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCB764B8F754351E7D29B84D /* DragSwapMonitor.swift */; };
 		79FB226CD9EAE55926A259C4 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = A80F5EABE42B83446F2F49BF /* main.swift */; };
+		81E10D26DFBD36AC17ED24D4 /* TilerLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C1A7B25E70808D0729BE9C /* TilerLog.swift */; };
 		D42A4F127284C02A3FC0BC7F /* WindowTiler.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF1AA3CB59D85BFAF51E20BD /* WindowTiler.swift */; };
 		EA1B42B6A3A77D9990DB1487 /* NotificationPoster.swift in Sources */ = {isa = PBXBuildFile; fileRef = 475E749A4367D97982983AC6 /* NotificationPoster.swift */; };
 		F0FD2115A049856B74A49B85 /* StrategyIcons.swift in Sources */ = {isa = PBXBuildFile; fileRef = 800F73BAF76F859B40381753 /* StrategyIcons.swift */; };
@@ -33,6 +34,7 @@
 		8FCD9749DD3E35BFF6BF5860 /* AccessibilityPermission.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityPermission.swift; sourceTree = "<group>"; };
 		A80F5EABE42B83446F2F49BF /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		DCB764B8F754351E7D29B84D /* DragSwapMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DragSwapMonitor.swift; sourceTree = "<group>"; };
+		F3C1A7B25E70808D0729BE9C /* TilerLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TilerLog.swift; sourceTree = "<group>"; };
 		F68B307B4C278B4B9F8F9583 /* StrategyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrategyStore.swift; sourceTree = "<group>"; };
 		FF1AA3CB59D85BFAF51E20BD /* WindowTiler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowTiler.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -52,6 +54,7 @@
 				475E749A4367D97982983AC6 /* NotificationPoster.swift */,
 				800F73BAF76F859B40381753 /* StrategyIcons.swift */,
 				F68B307B4C278B4B9F8F9583 /* StrategyStore.swift */,
+				F3C1A7B25E70808D0729BE9C /* TilerLog.swift */,
 				FF1AA3CB59D85BFAF51E20BD /* WindowTiler.swift */,
 			);
 			path = MacTiler;
@@ -150,6 +153,7 @@
 				EA1B42B6A3A77D9990DB1487 /* NotificationPoster.swift in Sources */,
 				F0FD2115A049856B74A49B85 /* StrategyIcons.swift in Sources */,
 				3ED653A2E7C39B155DC9573E /* StrategyStore.swift in Sources */,
+				81E10D26DFBD36AC17ED24D4 /* TilerLog.swift in Sources */,
 				D42A4F127284C02A3FC0BC7F /* WindowTiler.swift in Sources */,
 				79FB226CD9EAE55926A259C4 /* main.swift in Sources */,
 			);
@@ -193,7 +197,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = G2B4QZWQN7;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -207,7 +211,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.1.1;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -224,7 +228,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Resources/MacTiler.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
-				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Resources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
@@ -240,7 +244,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Resources/MacTiler.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
-				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Resources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
@@ -285,7 +289,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = G2B4QZWQN7;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -305,7 +309,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.1.1;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
