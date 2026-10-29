@@ -1,0 +1,38 @@
+name: MacTiler
+options:
+  developmentLanguage: en
+  bundleIdPrefix: com.junmaly
+  deploymentTarget:
+    macOS: "13.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    DEVELOPMENT_TEAM: G2B4QZWQN7
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    MACOSX_DEPLOYMENT_TARGET: "13.0"
+targets:
+  MacTiler:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources/MacTiler
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.junmaly.mactiler
+        PRODUCT_NAME: MacTiler
+        INFOPLIST_FILE: Resources/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        LD_RUNPATH_SEARCH_PATHS: "@executable_path/../Frameworks"
+        CODE_SIGN_ENTITLEMENTS: Resources/MacTiler.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+        COMBINE_HIDPI_IMAGES: YES
+schemes:
+  MacTiler:
+    build:
+      targets:
+        MacTiler: all
+    run:
+      config: Debug
