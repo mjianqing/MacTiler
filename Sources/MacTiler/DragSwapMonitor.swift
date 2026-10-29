@@ -93,13 +93,13 @@ final class DragSwapMonitor {
 
         // Target = manageable window whose frame contains the cursor (no harsh inset).
         if let target = windowUnderCursor(point: point, excluding: source) {
-            if !CFEqual(target.element, highlightedTarget) {
+            // CFEqual crashes on nil (CFEqual.cold.1); only compare when highlighted.
+            let same = highlightedTarget.map { CFEqual(target.element, $0) as Bool } ?? false
+            if !same {
                 highlightedTarget = target.element
-                highlight.show(over: target.frame)
-            } else {
-                // Keep overlay synced if window moved during drag.
-                highlight.show(over: target.frame)
             }
+            // Keep overlay synced if window moved during drag.
+            highlight.show(over: target.frame)
         } else {
             highlightedTarget = nil
             highlight.hide()
