@@ -1,12 +1,12 @@
 import AppKit
 import UserNotifications
 
-@main
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBar: MenuBarController?
     private var autoRetileWatcher: AutoRetileWatcher?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+
         // Ensure we stay as agent (also set LSUIElement in Info.plist)
         NSApp.setActivationPolicy(.accessory)
 
