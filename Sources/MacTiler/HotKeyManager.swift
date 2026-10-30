@@ -13,6 +13,8 @@ final class HotKeyManager {
         case strategy5 = 7          // half-quarters-quarters
         case strategy6 = 8          // quarter-half-quarter
         case pause = 9
+        case screenshotRegion = 10
+        case screenshotDisplay = 11
     }
 
     var handler: ((Action) -> Void)?
@@ -21,6 +23,7 @@ final class HotKeyManager {
     private var eventHandler: EventHandlerRef?
 
     func start() {
+        stop()
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
         let userData = Unmanaged.passUnretained(self).toOpaque()
         InstallEventHandler(GetApplicationEventTarget(), { (_, event, userData) -> OSStatus in
@@ -46,6 +49,17 @@ final class HotKeyManager {
         register(Action.strategy5, keyCode: UInt32(kVK_ANSI_5), modifiers: mods)
         register(Action.strategy6, keyCode: UInt32(kVK_ANSI_6), modifiers: mods)
         register(Action.pause, keyCode: UInt32(kVK_ANSI_P), modifiers: mods)
+
+        let store = StrategyStore.shared
+        let region = store.screenshotRegionHotKey
+        let display = store.screenshotDisplayHotKey
+        register(Action.screenshotRegion, keyCode: region.keyCode, modifiers: region.carbonModifiers)
+        register(Action.screenshotDisplay, keyCode: display.keyCode, modifiers: display.carbonModifiers)
+    }
+
+    /// Re-register after prefs change (screenshot hotkeys).
+    func reload() {
+        start()
     }
 
     func stop() {

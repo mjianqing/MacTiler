@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		05F6FCF9C23264A420EED8F3 /* ScreenshotPrefsPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6837A1169B19F615CB2FC39C /* ScreenshotPrefsPanel.swift */; };
 		097B062C40269FA56A1E92D3 /* LayoutEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38C0B096AFF336C1ECD3AA88 /* LayoutEngine.swift */; };
 		26C445CB63F904AFD5141C1B /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62710522CE033227C6B8E443 /* AppDelegate.swift */; };
 		2DF2FE7FE7B3CDEBC687B7E4 /* MenuBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 107F8523247D101EA63741E6 /* MenuBarController.swift */; };
@@ -16,8 +17,10 @@
 		68C960FBA8CB769FFE71041A /* DragSwapMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCB764B8F754351E7D29B84D /* DragSwapMonitor.swift */; };
 		79FB226CD9EAE55926A259C4 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = A80F5EABE42B83446F2F49BF /* main.swift */; };
 		81E10D26DFBD36AC17ED24D4 /* TilerLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C1A7B25E70808D0729BE9C /* TilerLog.swift */; };
+		C0A1DB1BF06166EC3BEF415B /* ScreenshotService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CECAC5588489EE19E6AB8CA /* ScreenshotService.swift */; };
 		D42A4F127284C02A3FC0BC7F /* WindowTiler.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF1AA3CB59D85BFAF51E20BD /* WindowTiler.swift */; };
 		EA1B42B6A3A77D9990DB1487 /* NotificationPoster.swift in Sources */ = {isa = PBXBuildFile; fileRef = 475E749A4367D97982983AC6 /* NotificationPoster.swift */; };
+		ED50BEEC5C4320224C433D3F /* ScreenshotPermission.swift in Sources */ = {isa = PBXBuildFile; fileRef = 348A13E90CAA2317C153EC27 /* ScreenshotPermission.swift */; };
 		F0FD2115A049856B74A49B85 /* StrategyIcons.swift in Sources */ = {isa = PBXBuildFile; fileRef = 800F73BAF76F859B40381753 /* StrategyIcons.swift */; };
 		F40CE501D74D785CDC631A22 /* AccessibilityPermission.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FCD9749DD3E35BFF6BF5860 /* AccessibilityPermission.swift */; };
 /* End PBXBuildFile section */
@@ -26,9 +29,12 @@
 		02C349FC95B548EADEC4A278 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		0594843D8963C2CCA5DEAB92 /* MacTiler.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MacTiler.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		107F8523247D101EA63741E6 /* MenuBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarController.swift; sourceTree = "<group>"; };
+		2CECAC5588489EE19E6AB8CA /* ScreenshotService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotService.swift; sourceTree = "<group>"; };
+		348A13E90CAA2317C153EC27 /* ScreenshotPermission.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotPermission.swift; sourceTree = "<group>"; };
 		38C0B096AFF336C1ECD3AA88 /* LayoutEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayoutEngine.swift; sourceTree = "<group>"; };
 		475E749A4367D97982983AC6 /* NotificationPoster.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationPoster.swift; sourceTree = "<group>"; };
 		62710522CE033227C6B8E443 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		6837A1169B19F615CB2FC39C /* ScreenshotPrefsPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotPrefsPanel.swift; sourceTree = "<group>"; };
 		6BE704E9CCD28A48EDA0E066 /* HotKeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotKeyManager.swift; sourceTree = "<group>"; };
 		800F73BAF76F859B40381753 /* StrategyIcons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrategyIcons.swift; sourceTree = "<group>"; };
 		8FCD9749DD3E35BFF6BF5860 /* AccessibilityPermission.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityPermission.swift; sourceTree = "<group>"; };
@@ -52,6 +58,9 @@
 				107F8523247D101EA63741E6 /* MenuBarController.swift */,
 				02C349FC95B548EADEC4A278 /* Models.swift */,
 				475E749A4367D97982983AC6 /* NotificationPoster.swift */,
+				348A13E90CAA2317C153EC27 /* ScreenshotPermission.swift */,
+				6837A1169B19F615CB2FC39C /* ScreenshotPrefsPanel.swift */,
+				2CECAC5588489EE19E6AB8CA /* ScreenshotService.swift */,
 				800F73BAF76F859B40381753 /* StrategyIcons.swift */,
 				F68B307B4C278B4B9F8F9583 /* StrategyStore.swift */,
 				F3C1A7B25E70808D0729BE9C /* TilerLog.swift */,
@@ -151,6 +160,9 @@
 				2DF2FE7FE7B3CDEBC687B7E4 /* MenuBarController.swift in Sources */,
 				48969C84A7F9D97E75F3154D /* Models.swift in Sources */,
 				EA1B42B6A3A77D9990DB1487 /* NotificationPoster.swift in Sources */,
+				ED50BEEC5C4320224C433D3F /* ScreenshotPermission.swift in Sources */,
+				05F6FCF9C23264A420EED8F3 /* ScreenshotPrefsPanel.swift in Sources */,
+				C0A1DB1BF06166EC3BEF415B /* ScreenshotService.swift in Sources */,
 				F0FD2115A049856B74A49B85 /* StrategyIcons.swift in Sources */,
 				3ED653A2E7C39B155DC9573E /* StrategyStore.swift in Sources */,
 				81E10D26DFBD36AC17ED24D4 /* TilerLog.swift in Sources */,
@@ -197,7 +209,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = G2B4QZWQN7;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -211,7 +223,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 0.1.9;
+				MARKETING_VERSION = 0.1.10;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -289,7 +301,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = G2B4QZWQN7;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -309,7 +321,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 0.1.9;
+				MARKETING_VERSION = 0.1.10;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

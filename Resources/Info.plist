@@ -26,5 +26,7 @@
 	<string>Copyright © 2026</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>MacTiler 需要屏幕录制权限以截取选区或焦点屏画面到剪贴板（可选同时存桌面）。与窗口铺砖所用的辅助功能权限相互独立。</string>
 </dict>
 </plist>

@@ -24,6 +24,24 @@ final class StrategyStore {
             }
             if let v = obj["autoRetile"] as? Bool { prefs.autoRetile = v }
             if let v = obj["paused"] as? Bool { prefs.paused = v }
+            if let v = obj["saveScreenshotToDesktop"] as? Bool { prefs.saveScreenshotToDesktop = v }
+            if let hk = obj["screenshotRegionHotKey"] as? [String: Any],
+               let kc = hk["keyCode"] as? Int,
+               let mods = hk["carbonModifiers"] as? Int {
+                prefs.screenshotRegionHotKey = HotKeySpec(keyCode: UInt32(kc), carbonModifiers: UInt32(mods))
+            }
+            if let hk = obj["screenshotDisplayHotKey"] as? [String: Any],
+               let kc = hk["keyCode"] as? Int,
+               let mods = hk["carbonModifiers"] as? Int {
+                prefs.screenshotDisplayHotKey = HotKeySpec(keyCode: UInt32(kc), carbonModifiers: UInt32(mods))
+            }
+            // Reject persisted ⌘⇧3/4/5 as region/display defaults
+            if prefs.screenshotRegionHotKey.looksLikeSystemScreenshotDefault {
+                prefs.screenshotRegionHotKey = .defaultRegion
+            }
+            if prefs.screenshotDisplayHotKey.looksLikeSystemScreenshotDefault {
+                prefs.screenshotDisplayHotKey = .defaultDisplay
+            }
             // drop halfOnLeft / profile fields
             preferences = prefs
             save()
@@ -55,6 +73,29 @@ final class StrategyStore {
     var currentStrategy: StrategyID {
         get { preferences.strategy }
         set { preferences.currentStrategy = newValue.rawValue }
+    }
+
+    var saveScreenshotToDesktop: Bool {
+        get { preferences.saveScreenshotToDesktop }
+        set { preferences.saveScreenshotToDesktop = newValue }
+    }
+
+    var screenshotRegionHotKey: HotKeySpec {
+        get { preferences.screenshotRegionHotKey }
+        set {
+            var v = newValue
+            if v.looksLikeSystemScreenshotDefault { v = .defaultRegion }
+            preferences.screenshotRegionHotKey = v
+        }
+    }
+
+    var screenshotDisplayHotKey: HotKeySpec {
+        get { preferences.screenshotDisplayHotKey }
+        set {
+            var v = newValue
+            if v.looksLikeSystemScreenshotDefault { v = .defaultDisplay }
+            preferences.screenshotDisplayHotKey = v
+        }
     }
 
     func setStrategy(_ strategy: StrategyID) {

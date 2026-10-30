@@ -40,7 +40,10 @@ final class MenuBarController: NSObject {
     }
 
     private func menuFingerprint(trusted: Bool, store: StrategyStore, strategy: StrategyID) -> String {
-        "\(trusted)|\(store.isPaused)|\(store.autoRetile)|\(strategy.rawValue)"
+        let scr = ScreenshotPermission.isTrusted()
+        let r = store.screenshotRegionHotKey.displayString
+        let d = store.screenshotDisplayHotKey.displayString
+        return "\(trusted)|\(scr)|\(store.isPaused)|\(store.autoRetile)|\(strategy.rawValue)|\(store.saveScreenshotToDesktop)|\(r)|\(d)"
     }
 
     /// Timer path: only rebuild when relevant state flipped (avoids rewriting NSMenu every 2s).
@@ -113,6 +116,29 @@ final class MenuBarController: NSObject {
 
         menu.addItem(NSMenuItem.separator())
 
+        // Screenshot — independent of pause (PRD). Hotkey equiv shown as hint only.
+        let regionHK = StrategyStore.shared.screenshotRegionHotKey.displayString
+        let shotRegion = NSMenuItem(title: "选区截图（\(regionHK)）", action: #selector(screenshotRegion), keyEquivalent: "")
+        shotRegion.target = self
+        menu.addItem(shotRegion)
+
+        let displayHK = StrategyStore.shared.screenshotDisplayHotKey.displayString
+        let shotDisplay = NSMenuItem(title: "焦点屏整屏（\(displayHK)）", action: #selector(screenshotDisplay), keyEquivalent: "")
+        shotDisplay.target = self
+        menu.addItem(shotDisplay)
+
+        let shotPrefs = NSMenuItem(title: "截图偏好…", action: #selector(openScreenshotPrefs), keyEquivalent: "")
+        shotPrefs.target = self
+        menu.addItem(shotPrefs)
+
+        if !ScreenshotPermission.isTrusted() {
+            let scr = NSMenuItem(title: "打开屏幕录制设置…", action: #selector(openScreenRecording), keyEquivalent: "")
+            scr.target = self
+            menu.addItem(scr)
+        }
+
+        menu.addItem(NSMenuItem.separator())
+
         let auto = NSMenuItem(title: "自动重排", action: #selector(toggleAuto), keyEquivalent: "")
         auto.state = store.autoRetile ? .on : .off
         auto.target = self
@@ -144,6 +170,18 @@ final class MenuBarController: NSObject {
     }
 
     private func handleHotKey(_ action: HotKeyManager.Action) {
+        // Screenshot must work without Accessibility (separate TCC: Screen Recording).
+        if action == .screenshotRegion {
+            runScreenshot(.region)
+            rebuildMenu()
+            return
+        }
+        if action == .screenshotDisplay {
+            runScreenshot(.focusDisplay)
+            rebuildMenu()
+            return
+        }
+
         guard AccessibilityPermission.isTrusted(prompt: false) else {
             present(.needAccessibility)
             rebuildMenu()
@@ -175,6 +213,8 @@ final class MenuBarController: NSObject {
         case .pause:
             store.isPaused.toggle()
             present(store.isPaused ? .paused : .info("已恢复"))
+        case .screenshotRegion, .screenshotDisplay:
+            break // handled above (no AX required)
         }
         rebuildMenu()
     }
@@ -242,5 +282,47 @@ final class MenuBarController: NSObject {
     @objc private func quit() {
         hotKeys.stop()
         NSApp.terminate(nil)
+    }
+
+    @objc private func screenshotRegion() {
+        runScreenshot(.region)
+        rebuildMenu()
+    }
+
+    @objc private func screenshotDisplay() {
+        runScreenshot(.focusDisplay)
+        rebuildMenu()
+    }
+
+    @objc private func openScreenshotPrefs() {
+        ScreenshotPrefsPanel.shared.show { [weak self] in
+            self?.hotKeys.reload()
+            self?.rebuildMenu()
+        }
+    }
+
+    @objc private func openScreenRecording() {
+        ScreenshotPermission.openSystemSettings()
+        _ = ScreenshotPermission.requestAccess()
+    }
+
+    /// Screenshot ignores tiling pause (PRD).
+    private func runScreenshot(_ mode: ScreenshotService.Mode) {
+        let outcome = ScreenshotService.capture(mode)
+        switch outcome {
+        case .success(let path):
+            if let path {
+                notify("已截图", "剪贴板 + \(URL(fileURLWithPath: path).lastPathComponent)")
+            } else {
+                notify("已截图", "已复制到剪贴板")
+            }
+        case .cancelled:
+            notify("已取消", "未截取")
+        case .needScreenRecording:
+            notify("需要屏幕录制权限", "打开开关后请退出并重开 MacTiler，然后重试。")
+            ScreenshotPermission.openSystemSettingsIfNeeded()
+        case .failed(let reason):
+            notify("截图失败", reason)
+        }
     }
 }
