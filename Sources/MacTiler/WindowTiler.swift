@@ -8,6 +8,16 @@ final class WindowTiler {
     private static let widthTolFraction: CGFloat = 0.02
     /// Adjacent strips may share a ≤1pt seam; anything more is overlap.
     private static let overlapSeam: CGFloat = 1.0
+    /// Skip setFrame when already within this many points of the target (Amethyst-style threshold).
+    private static let frameSkipThreshold: CGFloat = 3.0
+    /// Cache visual non-resizable probe results so strategy switches do not flash probe→restore.
+    private static let probeCacheTTL: TimeInterval = 120
+
+    private struct ProbeCacheEntry {
+        let nonResizable: Bool
+        let at: Date
+    }
+    private var probeCache: [String: ProbeCacheEntry] = [:]
 
     private init() {}
 
@@ -256,7 +266,6 @@ final class WindowTiler {
                         workArea: workArea
                     )
                 }
-                usleep(50_000)
                 for i in 0..<n {
                     let after = getAppKitFrame(windows[i].element)
                     actualWidths[i] = after?.width ?? actualWidths[i]
@@ -371,7 +380,6 @@ final class WindowTiler {
         }
 
         // Final verify: re-read, fix residual overlap by L→R pack on actual widths, then check.
-        usleep(40_000)
         var frames = windows.compactMap { getAppKitFrame($0.element) }
         if frames.count != n {
             result.failReason = "布局未对齐：无法读回窗口 frame"
@@ -404,7 +412,6 @@ final class WindowTiler {
                 x = min(maxX, floor(actual.maxX))
                 result.clampCompromised = true
             }
-            usleep(40_000)
             frames = windows.compactMap { getAppKitFrame($0.element) }
         }
 
@@ -448,10 +455,39 @@ final class WindowTiler {
         return frames.contains { floor($0.maxX) > maxX + 1 || floor($0.minX) < minX - 1 }
     }
 
-    /// Probe: write a clearly different width; if width barely moves and stays far from target → fixed-size.
-    /// Probe rect is always fitted inside `workArea` — growing from a right-edge x was a false
-    /// nonResizable source (GitHub Desktop / Chrome near mid-screen refused overflow grow).
+    /// Prefer read-only / cache; visual probe only as last resort (probe→restore is a major flicker source on half↔maximize).
     private func isFullyNonResizable(_ win: ManagedWindow, workArea: CGRect) -> Bool {
+        let key = probeCacheKey(win)
+        if let hit = probeCache[key], Date().timeIntervalSince(hit.at) < Self.probeCacheTTL {
+            return hit.nonResizable
+        }
+
+        // Read-only: size attribute not settable → fixed.
+        var settable = DarwinBoolean(true)
+        if AXUIElementIsAttributeSettable(win.element, kAXSizeAttribute as CFString, &settable) == .success,
+           !settable.boolValue {
+            probeCache[key] = ProbeCacheEntry(nonResizable: true, at: Date())
+            return true
+        }
+
+        // Read-only: AXMinSize already fills the workArea → cannot tile meaningfully.
+        if let min = axMinSize(win.element),
+           min.width >= workArea.width * 0.98,
+           min.height >= workArea.height * 0.98 {
+            probeCache[key] = ProbeCacheEntry(nonResizable: true, at: Date())
+            return true
+        }
+
+        // Already looks tiled / user-sized inside workArea → treat as resizable without flashing a probe.
+        if let before = getAppKitFrame(win.element) {
+            let heightOK = abs(before.height - workArea.height) <= max(8, workArea.height * 0.05)
+            let widthInBand = before.width > 80 && before.width < workArea.width * 0.98
+            if heightOK && (widthInBand || abs(before.width - workArea.width) <= max(4, workArea.width * 0.02)) {
+                probeCache[key] = ProbeCacheEntry(nonResizable: false, at: Date())
+                return false
+            }
+        }
+
         guard let before = getAppKitFrame(win.element) else { return false }
         let tol = max(2, workArea.width * Self.widthTolFraction)
         let minX = floor(workArea.minX)
@@ -468,10 +504,10 @@ final class WindowTiler {
             }
         }
         if abs(probeW - before.width) <= 2 {
+            probeCache[key] = ProbeCacheEntry(nonResizable: false, at: Date())
             return false // cannot construct a distinct probe
         }
         probeW = min(probeW, areaW)
-        // Keep the probe fully inside workArea (do not preserve an x that makes w overflow).
         let fittedX = min(max(minX, floor(before.origin.x)), max(minX, maxX - probeW))
         let probe = CGRect(
             x: fittedX,
@@ -484,17 +520,20 @@ final class WindowTiler {
         let unchanged = abs(after.width - before.width) <= 2
         let missed = abs(after.width - probeW) > tol
         let nonResizable = unchanged && missed
-        // Always restore — probe must not leave the window parked at the test rect
-        // (esp. non-resizable: we skip tiling it next, so without restore it stays moved).
         if abs(after.minX - before.minX) > 1 || abs(after.minY - before.minY) > 1
             || abs(after.width - before.width) > 1 || abs(after.height - before.height) > 1 {
             _ = setFrame(win.element, appKitFrame: before, title: win.title + "/probe-restore", workAreaWidth: workArea.width, workArea: workArea)
         }
+        probeCache[key] = ProbeCacheEntry(nonResizable: nonResizable, at: Date())
         if nonResizable {
             TilerLog.info("nonResizable title=\(win.title.prefix(24)) beforeW=\(Int(before.width)) probeW=\(Int(probeW)) afterW=\(Int(after.width)) fittedX=\(Int(fittedX))")
             return true
         }
         return false
+    }
+
+    private func probeCacheKey(_ win: ManagedWindow) -> String {
+        "\(win.pid)|\(win.title)"
     }
 
     /// Degrade: place as many as fit L→R without overlap given measured min widths.
@@ -529,7 +568,6 @@ final class WindowTiler {
             placed += 1
             if x >= maxX - 1 { break }
         }
-        usleep(40_000)
         let frames = Array(windows.prefix(placed).compactMap { getAppKitFrame($0.element) })
         let bad = hasOverlap(frames) || exceedsWorkArea(frames, workArea)
         return (placed, bad)
@@ -688,11 +726,10 @@ final class WindowTiler {
         let apiDisabled: Bool
     }
 
-    /// Apply AX size/position. Pass 1: size→pos→size→pos; if still off, pass 2: pos→size→pos.
-    /// If still too wide, shrink-recovery: size at current x, then move, then size again
-    /// (Electron/Cursor often rejects size+move in one shot but accepts staged shrink — and
-    /// hand-drag proves equal half is reachable).
-    /// Success requires position+width within tolerance (no longer treat "moved" alone as OK).
+    /// Apply AX size/position for a single final rect.
+    /// Industry path (Rectangle/AeroSpace/Amethyst ideas, self-written):
+    /// 1) threshold-skip if already close; 2) temporarily clear AXEnhancedUserInterface;
+    /// 3) write size → position → size once; 4) escalate only on miss (no default animation).
     @discardableResult
     private func setFrame(
         _ win: AXUIElement,
@@ -701,6 +738,19 @@ final class WindowTiler {
         workAreaWidth: CGFloat = 0,
         workArea: CGRect? = nil
     ) -> SetFrameOutcome {
+        let waW = workArea.map { $0.width } ?? workAreaWidth
+        let tolW = max(2, (waW > 0 ? waW : max(appKitFrame.width, 1)) * Self.widthTolFraction)
+        let skip = Self.frameSkipThreshold
+
+        if let current = getAppKitFrame(win),
+           abs(current.origin.x - appKitFrame.origin.x) <= skip,
+           abs(current.origin.y - appKitFrame.origin.y) <= skip,
+           abs(current.width - appKitFrame.width) <= skip,
+           abs(current.height - appKitFrame.height) <= max(skip, 8) {
+            TilerLog.info("setFrame skip(threshold) title=\(title.prefix(32)) have=\(brief(current)) want=\(brief(appKitFrame))")
+            return SetFrameOutcome(ok: true, apiDisabled: false)
+        }
+
         let axFrame = WindowTiler.appKitToAX(appKitFrame)
         var origin = axFrame.origin
         var size = axFrame.size
@@ -710,34 +760,29 @@ final class WindowTiler {
             return SetFrameOutcome(ok: false, apiDisabled: false)
         }
 
-        func apply(order: String) -> (p: AXError, s: AXError) {
-            var p: AXError = .failure
-            var s: AXError = .failure
-            if order == "size-first" {
-                s = AXUIElementSetAttributeValue(win, kAXSizeAttribute as CFString, sizeVal)
-                p = AXUIElementSetAttributeValue(win, kAXPositionAttribute as CFString, posVal)
-                s = AXUIElementSetAttributeValue(win, kAXSizeAttribute as CFString, sizeVal)
-                p = AXUIElementSetAttributeValue(win, kAXPositionAttribute as CFString, posVal)
-            } else {
-                // position → size → position
-                p = AXUIElementSetAttributeValue(win, kAXPositionAttribute as CFString, posVal)
-                s = AXUIElementSetAttributeValue(win, kAXSizeAttribute as CFString, sizeVal)
-                p = AXUIElementSetAttributeValue(win, kAXPositionAttribute as CFString, posVal)
-            }
-            return (p, s)
+        var pid: pid_t = 0
+        AXUIElementGetPid(win, &pid)
+        let enhanced = EnhancedUIGate(pid: pid)
+
+        func applySizePosSize() -> (p: AXError, s: AXError) {
+            // Canonical order: size → position → size (cross-display clamp needs trailing size).
+            let s1 = AXUIElementSetAttributeValue(win, kAXSizeAttribute as CFString, sizeVal)
+            let p1 = AXUIElementSetAttributeValue(win, kAXPositionAttribute as CFString, posVal)
+            let s2 = AXUIElementSetAttributeValue(win, kAXSizeAttribute as CFString, sizeVal)
+            return (p1, s1 != .success ? s1 : s2)
         }
 
-        var result = apply(order: "size-first")
+        enhanced.begin()
+        defer { enhanced.end() }
+
+        var result = applySizePosSize()
         var apiDisabled = (result.p == .apiDisabled || result.s == .apiDisabled)
         if apiDisabled {
             TilerLog.error("setFrame APIDisabled title=\(title.prefix(32)) p=\(result.p.rawValue) s=\(result.s.rawValue)")
             return SetFrameOutcome(ok: false, apiDisabled: true)
         }
 
-        usleep(30_000)
         var after = getAppKitFrame(win)
-        let waW = workArea.map { $0.width } ?? workAreaWidth
-        let tolW = max(2, (waW > 0 ? waW : max(appKitFrame.width, 1)) * Self.widthTolFraction)
         let tolX: CGFloat = 2
 
         func closeEnough(_ a: CGRect) -> Bool {
@@ -746,36 +791,36 @@ final class WindowTiler {
                 && abs(a.height - appKitFrame.height) <= max(8, tolW * 2)
         }
 
+        // Soft miss only: one pos→size→pos retry (still no animation / no intermediate target).
         if let a = after, !closeEnough(a) {
-            TilerLog.info("setFrame retry pos→size→pos title=\(title.prefix(32)) after1=\(a) target=\(appKitFrame) p=\(result.p.rawValue) s=\(result.s.rawValue)")
-            result = apply(order: "pos-first")
+            TilerLog.info("setFrame retry pos→size→pos title=\(title.prefix(32)) after1=\(brief(a)) want=\(brief(appKitFrame))")
+            var p: AXError = .failure
+            var s: AXError = .failure
+            p = AXUIElementSetAttributeValue(win, kAXPositionAttribute as CFString, posVal)
+            s = AXUIElementSetAttributeValue(win, kAXSizeAttribute as CFString, sizeVal)
+            p = AXUIElementSetAttributeValue(win, kAXPositionAttribute as CFString, posVal)
+            result = (p, s)
             apiDisabled = (result.p == .apiDisabled || result.s == .apiDisabled)
             if apiDisabled {
                 return SetFrameOutcome(ok: false, apiDisabled: true)
             }
-            usleep(30_000)
             after = getAppKitFrame(win)
         }
 
-        // Shrink-recovery: width still too large — stage size at current x, then move, then size.
+        // Shrink-recovery only when still too wide — stage at current/safe x, then final size→pos→size.
         if let a = after, a.width > appKitFrame.width + tolW {
             let minSize = axMinSize(win)
             TilerLog.info(
                 "setFrame shrink-recovery title=\(title.prefix(32)) haveW=\(Int(a.width)) wantW=\(Int(appKitFrame.width)) "
-                + "minSize=\(minSize.map { "\(Int($0.width))x\(Int($0.height))" } ?? "n/a") "
-                + "workArea=\(workArea.map { "\(Int($0.minX)),\(Int($0.width))" } ?? "n/a")"
+                + "minSize=\(minSize.map { "\(Int($0.width))x\(Int($0.height))" } ?? "n/a")"
             )
-            // Only skip recovery when AX reports a hard min wider than the target half.
             let hardMin = (minSize?.width ?? 0) > appKitFrame.width + tolW
             if !hardMin {
                 var wantSize = axFrame.size
                 if let sOnly = AXValueCreate(.cgSize, &wantSize) {
                     _ = AXUIElementSetAttributeValue(win, kAXSizeAttribute as CFString, sOnly)
-                    _ = AXUIElementSetAttributeValue(win, kAXSizeAttribute as CFString, sOnly)
                 }
-                usleep(40_000)
                 var mid = getAppKitFrame(win) ?? a
-                // If still wide and we know workArea, size at a safe x that fits target width.
                 if mid.width > appKitFrame.width + tolW, let wa = workArea {
                     let maxX = floor(wa.maxX)
                     let minX = floor(wa.minX)
@@ -790,44 +835,94 @@ final class WindowTiler {
                         _ = AXUIElementSetAttributeValue(win, kAXPositionAttribute as CFString, p)
                         _ = AXUIElementSetAttributeValue(win, kAXSizeAttribute as CFString, s)
                     }
-                    usleep(40_000)
                 }
-                // Final: apply full target again size-first then pos-first.
-                result = apply(order: "size-first")
-                usleep(30_000)
+                result = applySizePosSize()
                 after = getAppKitFrame(win)
-                if let b = after, !closeEnough(b) {
-                    result = apply(order: "pos-first")
-                    usleep(40_000)
-                    after = getAppKitFrame(win)
-                }
             }
         }
 
         if let a = after {
             let ok = closeEnough(a)
             if ok {
-                TilerLog.info("setFrame OK title=\(title.prefix(32)) target=\(appKitFrame) after=\(a) p=\(result.p.rawValue) s=\(result.s.rawValue)")
+                TilerLog.info("setFrame OK title=\(title.prefix(32)) want=\(brief(appKitFrame)) after=\(brief(a)) p=\(result.p.rawValue) s=\(result.s.rawValue) eui=\(enhanced.summary)")
             } else {
                 let minSize = axMinSize(win)
                 TilerLog.error(
-                    "setFrame MISS title=\(title.prefix(32)) target=\(appKitFrame) after=\(a) "
+                    "setFrame MISS title=\(title.prefix(32)) want=\(brief(appKitFrame)) after=\(brief(a)) "
                     + "dx=\(a.origin.x - appKitFrame.origin.x) dw=\(a.width - appKitFrame.width) "
                     + "minSize=\(minSize.map { "\(Int($0.width))" } ?? "n/a") "
-                    + "p=\(result.p.rawValue) s=\(result.s.rawValue)"
+                    + "p=\(result.p.rawValue) s=\(result.s.rawValue) eui=\(enhanced.summary)"
                 )
             }
             return SetFrameOutcome(ok: ok, apiDisabled: false)
         }
 
-        // No re-read — trust AX write status only.
         let ok = (result.p == .success && result.s == .success)
         if ok {
             TilerLog.info("setFrame OK (no re-read) title=\(title.prefix(32)) p=\(result.p.rawValue) s=\(result.s.rawValue)")
         } else {
-            TilerLog.error("setFrame FAIL title=\(title.prefix(32)) target=\(appKitFrame) ax=\(axFrame) p=\(result.p.rawValue) s=\(result.s.rawValue)")
+            TilerLog.error("setFrame FAIL title=\(title.prefix(32)) want=\(brief(appKitFrame)) ax=\(axFrame) p=\(result.p.rawValue) s=\(result.s.rawValue)")
         }
         return SetFrameOutcome(ok: ok, apiDisabled: false)
+    }
+
+    private func brief(_ r: CGRect) -> String {
+        "\(Int(r.minX)),\(Int(r.minY)) \(Int(r.width))x\(Int(r.height))"
+    }
+
+    /// Temporarily clears app-level AXEnhancedUserInterface while writing geometry.
+    /// Chromium/Electron: do not restore (avoids re-introducing AX animation stutter).
+    /// VoiceOver / Switch Control on: always restore.
+    private final class EnhancedUIGate {
+        let pid: pid_t
+        private let app: AXUIElement
+        private var prior: Bool?
+        private var changed = false
+        private let restore: Bool
+        var summary: String { "prior=\(prior.map { $0 ? "1" : "0" } ?? "?") changed=\(changed) restore=\(restore)" }
+
+        init(pid: pid_t) {
+            self.pid = pid
+            self.app = AXUIElementCreateApplication(pid)
+            let bid = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier?.lowercased() ?? ""
+            // Chromium/Electron: leave Enhanced UI off after write (Rectangle automatic).
+            let neverRestore = [
+                "chrome", "chromium", "electron", "brave", "microsoft.edgemac",
+                "opera", "vivaldi", "slack", "discord", "figma", "notion",
+                "vscode", "cursor", "visualstudiocode", ".code."
+            ].contains { bid.contains($0) }
+            let a11yOn = EnhancedUIGate.assistiveTechOn()
+            self.restore = a11yOn || !neverRestore
+        }
+
+        func begin() {
+            var ref: CFTypeRef?
+            let err = AXUIElementCopyAttributeValue(app, "AXEnhancedUserInterface" as CFString, &ref)
+            guard err == .success else {
+                prior = nil
+                return
+            }
+            let wasOn = (ref as? Bool) ?? false
+            prior = wasOn
+            guard wasOn else { return }
+            if AXUIElementSetAttributeValue(app, "AXEnhancedUserInterface" as CFString, kCFBooleanFalse) == .success {
+                changed = true
+                TilerLog.info("AXEnhancedUserInterface cleared pid=\(pid)")
+            }
+        }
+
+        func end() {
+            guard changed, restore, let prior, prior else { return }
+            _ = AXUIElementSetAttributeValue(app, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue)
+            TilerLog.info("AXEnhancedUserInterface restored pid=\(pid)")
+        }
+
+        private static func assistiveTechOn() -> Bool {
+            let apps = NSWorkspace.shared.runningApplications
+            return apps.contains {
+                ($0.bundleIdentifier ?? "").contains("VoiceOver") || ($0.localizedName ?? "") == "VoiceOver"
+            }
+        }
     }
 
     /// Best-effort AX minimum size (many apps omit it).
