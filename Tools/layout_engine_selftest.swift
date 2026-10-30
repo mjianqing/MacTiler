@@ -87,6 +87,17 @@ check("overflow hint", r4.overflowHint == 2 && r4.frames.count == 2)
 let r5 = LayoutEngine.frames(strategy: .threeThirds, windowCount: 2, workArea: wa)
 check("2win thirds→halves", r5.effective == .twoHalves && r5.frames.count == 2)
 
+// Odd workArea width: halves differ by ≤1pt, abut, and cover full workArea (Anna equal+fill)
+let waOdd = CGRect(x: -604, y: 900, width: 2561, height: 1440)
+let rOdd = LayoutEngine.frames(strategy: .twoHalves, windowCount: 2, workArea: waOdd)
+check("odd count=2", rOdd.frames.count == 2)
+check("odd abut", approx(rOdd.frames[0].maxX, rOdd.frames[1].minX))
+check("odd cover", approx(rOdd.frames[1].maxX, waOdd.maxX))
+check("odd left at minX", approx(rOdd.frames[0].minX, waOdd.minX))
+let dw = abs(rOdd.frames[0].width - rOdd.frames[1].width)
+check("odd equal≤1pt", dw <= 1)
+check("odd sum=work", approx(rOdd.frames[0].width + rOdd.frames[1].width, floor(waOdd.maxX) - floor(waOdd.minX)))
+
 if failed == 0 {
     print("ALL PASS")
     exit(0)

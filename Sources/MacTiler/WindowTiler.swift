@@ -167,6 +167,8 @@ final class WindowTiler {
     /// Place strips L→R. If a window is clamped by its min width, keep that width and
     /// redistribute the remaining work-area among unclamped strips (same relative fractions).
     /// Never report success while frames still overlap.
+    /// For equal-fraction full-span layouts (two-halves), retry exact targets before accepting
+    /// unequal redistrib — hand-drag proves equal half is often reachable despite a first miss.
     private func tileScreenRespectingMins(
         windows: [ManagedWindow],
         targets: [CGRect],
@@ -184,22 +186,113 @@ final class WindowTiler {
         var clamped = Array(repeating: false, count: n)
         var actualWidths = Array(repeating: CGFloat(0), count: n)
 
-        // Pass 1: apply ideal targets, detect clamps (actualW > targetW).
+        let targetsSpanFull = abs(targets.reduce(CGFloat(0)) { $0 + $1.width } - workArea.width) <= 2
+        let equalTargets = n >= 2 && targets.allSatisfy { abs($0.width - targets[0].width) <= 2 } && targetsSpanFull
+
+        // Pass 1: apply ideal targets.
         for i in 0..<n {
             let frame = CGRect(x: targets[i].minX, y: workArea.minY, width: desired[i], height: workArea.height)
-            let outcome = setFrame(windows[i].element, appKitFrame: frame, title: windows[i].title, workAreaWidth: workArea.width)
+            TilerLog.info(
+                "place target title=\(windows[i].title.prefix(24)) frame=\(Int(frame.minX)),\(Int(frame.minY)) "
+                + "\(Int(frame.width))x\(Int(frame.height)) workArea=\(Int(workArea.minX)),w=\(Int(workArea.width))"
+            )
+            let outcome = setFrame(
+                windows[i].element,
+                appKitFrame: frame,
+                title: windows[i].title,
+                workAreaWidth: workArea.width,
+                workArea: workArea
+            )
             if outcome.apiDisabled { result.apiDisabled = true }
             let after = getAppKitFrame(windows[i].element) ?? frame
             actualWidths[i] = after.width
+            let minSize = axMinSize(windows[i].element)
             if after.width > desired[i] + tol {
-                clamped[i] = true
-                desired[i] = after.width // locked to measured min (clamped size)
-                TilerLog.info("clamped title=\(windows[i].title.prefix(24)) targetW=\(Int(targets[i].width)) actualW=\(Int(after.width))")
+                TilerLog.info(
+                    "soft-wide title=\(windows[i].title.prefix(24)) targetW=\(Int(targets[i].width)) "
+                    + "actualW=\(Int(after.width)) minSize=\(minSize.map { Int($0.width) }.map(String.init) ?? "n/a")"
+                )
             }
-            if outcome.ok || clamped[i] {
+            if outcome.ok {
+                result.placed += 1
+            } else if after.width > desired[i] + tol {
+                // tentatively count as placed; equal-fill retry may still fix
                 result.placed += 1
             } else {
                 result.skipped += 1
+            }
+        }
+
+        // Equal-fill retry: re-apply exact targets R→L then L→R before locking any clamp.
+        // Avoids false "min-size" redistrib when Electron rejects the first combined move+shrink.
+        if equalTargets {
+            var drifted = false
+            for i in 0..<n {
+                let f = getAppKitFrame(windows[i].element)
+                if let f, abs(f.width - targets[i].width) > tol || abs(f.minX - targets[i].minX) > 2 {
+                    drifted = true
+                }
+                if f == nil { drifted = true }
+            }
+            if drifted {
+                TilerLog.info("equal-fill retry (R→L then L→R) workAreaW=\(Int(workArea.width)) half=\(Int(targets[0].width))")
+                for i in (0..<n).reversed() {
+                    let frame = CGRect(x: targets[i].minX, y: workArea.minY, width: targets[i].width, height: workArea.height)
+                    _ = setFrame(
+                        windows[i].element,
+                        appKitFrame: frame,
+                        title: windows[i].title + "/eq-rl",
+                        workAreaWidth: workArea.width,
+                        workArea: workArea
+                    )
+                }
+                for i in 0..<n {
+                    let frame = CGRect(x: targets[i].minX, y: workArea.minY, width: targets[i].width, height: workArea.height)
+                    _ = setFrame(
+                        windows[i].element,
+                        appKitFrame: frame,
+                        title: windows[i].title + "/eq-lr",
+                        workAreaWidth: workArea.width,
+                        workArea: workArea
+                    )
+                }
+                usleep(50_000)
+                for i in 0..<n {
+                    let after = getAppKitFrame(windows[i].element)
+                    actualWidths[i] = after?.width ?? actualWidths[i]
+                    TilerLog.info(
+                        "equal-fill after title=\(windows[i].title.prefix(24)) "
+                        + "targetW=\(Int(targets[i].width)) actualW=\(Int(actualWidths[i])) "
+                        + "x=\(after.map { Int($0.minX) }.map(String.init) ?? "?")"
+                    )
+                }
+            }
+        }
+
+        // Hard clamp only after retries, and only when still wider than target.
+        for i in 0..<n {
+            if actualWidths[i] > desired[i] + tol {
+                let minSize = axMinSize(windows[i].element)
+                let minW = minSize?.width ?? 0
+                // Anna: do not blame min-size unless logs prove min > half.
+                if minW > desired[i] + tol {
+                    clamped[i] = true
+                    desired[i] = actualWidths[i]
+                    TilerLog.info(
+                        "clamped(minSize) title=\(windows[i].title.prefix(24)) targetW=\(Int(targets[i].width)) "
+                        + "actualW=\(Int(actualWidths[i])) axMinW=\(Int(minW))"
+                    )
+                } else {
+                    // Still too wide with no proven AX min — lock measured width only as last resort
+                    // so redistrib can keep full span without overlap; message stays honest.
+                    clamped[i] = true
+                    desired[i] = actualWidths[i]
+                    TilerLog.info(
+                        "clamped(refused) title=\(windows[i].title.prefix(24)) targetW=\(Int(targets[i].width)) "
+                        + "actualW=\(Int(actualWidths[i])) axMinW=\(minSize.map { Int($0.width) }.map(String.init) ?? "n/a") "
+                        + "— equal-fill retry still wide"
+                    )
+                }
             }
         }
 
@@ -248,7 +341,6 @@ final class WindowTiler {
             // Only eat remainder to workArea.maxX when targets already span the full
             // workArea (all strategy slots filled). Otherwise keep empty slots empty —
             // never inflate the last placed window into unused strip space.
-            let targetsSpanFull = abs(targets.reduce(CGFloat(0)) { $0 + $1.width } - workArea.width) <= 2
             var x = floor(workArea.minX)
             let maxX = floor(workArea.maxX)
             for i in 0..<n {
@@ -260,7 +352,7 @@ final class WindowTiler {
                     w = max(1, min(floor(desired[i]), remainW))
                 }
                 let frame = CGRect(x: x, y: workArea.minY, width: w, height: workArea.height)
-                let outcome = setFrame(windows[i].element, appKitFrame: frame, title: windows[i].title + "/redist", workAreaWidth: workArea.width)
+                let outcome = setFrame(windows[i].element, appKitFrame: frame, title: windows[i].title + "/redist", workAreaWidth: workArea.width, workArea: workArea)
                 if outcome.apiDisabled { result.apiDisabled = true }
                 let after = getAppKitFrame(windows[i].element) ?? frame
                 actualWidths[i] = after.width
@@ -300,13 +392,13 @@ final class WindowTiler {
                 // P1: never plan past right edge — w = min(actualW, workArea.maxX - x)
                 let w = min(max(1, floor(actual.width)), remain)
                 let frame = CGRect(x: x, y: workArea.minY, width: w, height: workArea.height)
-                _ = setFrame(windows[i].element, appKitFrame: frame, title: windows[i].title + "/pack", workAreaWidth: workArea.width)
+                _ = setFrame(windows[i].element, appKitFrame: frame, title: windows[i].title + "/pack", workAreaWidth: workArea.width, workArea: workArea)
                 actual = getAppKitFrame(windows[i].element) ?? frame
                 // If min-width still overflows, pin right edge (may overlap → fail visibly below)
                 if floor(actual.maxX) > maxX + 1 {
                     let pinnedX = max(floor(workArea.minX), maxX - floor(actual.width))
                     let pinned = CGRect(x: pinnedX, y: workArea.minY, width: floor(actual.width), height: workArea.height)
-                    _ = setFrame(windows[i].element, appKitFrame: pinned, title: windows[i].title + "/pack-pin", workAreaWidth: workArea.width)
+                    _ = setFrame(windows[i].element, appKitFrame: pinned, title: windows[i].title + "/pack-pin", workAreaWidth: workArea.width, workArea: workArea)
                     actual = getAppKitFrame(windows[i].element) ?? pinned
                 }
                 x = min(maxX, floor(actual.maxX))
@@ -357,26 +449,37 @@ final class WindowTiler {
     }
 
     /// Probe: write a clearly different width; if width barely moves and stays far from target → fixed-size.
+    /// Probe rect is always fitted inside `workArea` — growing from a right-edge x was a false
+    /// nonResizable source (GitHub Desktop / Chrome near mid-screen refused overflow grow).
     private func isFullyNonResizable(_ win: ManagedWindow, workArea: CGRect) -> Bool {
         guard let before = getAppKitFrame(win.element) else { return false }
         let tol = max(2, workArea.width * Self.widthTolFraction)
-        var probeW = floor(workArea.width * 0.5)
+        let minX = floor(workArea.minX)
+        let maxX = floor(workArea.maxX)
+        let areaW = max(1, maxX - minX)
+
+        var probeW = floor(areaW * 0.5)
         if abs(probeW - before.width) <= tol {
-            probeW = floor(min(workArea.width - 1, max(100, before.width + max(80, workArea.width * 0.1))))
-        }
-        if abs(probeW - before.width) <= tol {
-            probeW = floor(max(100, before.width * 0.5))
+            let grow = floor(min(areaW - 1, max(100, before.width + max(80, areaW * 0.1))))
+            if grow > before.width + 2 {
+                probeW = grow
+            } else {
+                probeW = floor(max(100, before.width * 0.5))
+            }
         }
         if abs(probeW - before.width) <= 2 {
             return false // cannot construct a distinct probe
         }
+        probeW = min(probeW, areaW)
+        // Keep the probe fully inside workArea (do not preserve an x that makes w overflow).
+        let fittedX = min(max(minX, floor(before.origin.x)), max(minX, maxX - probeW))
         let probe = CGRect(
-            x: floor(before.origin.x),
+            x: fittedX,
             y: workArea.minY,
             width: max(1, probeW),
             height: workArea.height
         )
-        _ = setFrame(win.element, appKitFrame: probe, title: win.title + "/probe", workAreaWidth: workArea.width)
+        _ = setFrame(win.element, appKitFrame: probe, title: win.title + "/probe", workAreaWidth: workArea.width, workArea: workArea)
         let after = getAppKitFrame(win.element) ?? before
         let unchanged = abs(after.width - before.width) <= 2
         let missed = abs(after.width - probeW) > tol
@@ -385,10 +488,10 @@ final class WindowTiler {
         // (esp. non-resizable: we skip tiling it next, so without restore it stays moved).
         if abs(after.minX - before.minX) > 1 || abs(after.minY - before.minY) > 1
             || abs(after.width - before.width) > 1 || abs(after.height - before.height) > 1 {
-            _ = setFrame(win.element, appKitFrame: before, title: win.title + "/probe-restore", workAreaWidth: workArea.width)
+            _ = setFrame(win.element, appKitFrame: before, title: win.title + "/probe-restore", workAreaWidth: workArea.width, workArea: workArea)
         }
         if nonResizable {
-            TilerLog.info("nonResizable title=\(win.title.prefix(24)) beforeW=\(Int(before.width)) probeW=\(Int(probeW)) afterW=\(Int(after.width))")
+            TilerLog.info("nonResizable title=\(win.title.prefix(24)) beforeW=\(Int(before.width)) probeW=\(Int(probeW)) afterW=\(Int(after.width)) fittedX=\(Int(fittedX))")
             return true
         }
         return false
@@ -414,12 +517,12 @@ final class WindowTiler {
             }
             let w = min(need, remain) // P1: never past right edge
             let frame = CGRect(x: x, y: workArea.minY, width: max(1, w), height: workArea.height)
-            _ = setFrame(windows[i].element, appKitFrame: frame, title: windows[i].title + "/fit", workAreaWidth: workArea.width)
+            _ = setFrame(windows[i].element, appKitFrame: frame, title: windows[i].title + "/fit", workAreaWidth: workArea.width, workArea: workArea)
             var after = getAppKitFrame(windows[i].element) ?? frame
             if floor(after.maxX) > maxX + 1 {
                 let pinnedX = max(floor(workArea.minX), maxX - floor(after.width))
                 let pinned = CGRect(x: pinnedX, y: workArea.minY, width: floor(after.width), height: workArea.height)
-                _ = setFrame(windows[i].element, appKitFrame: pinned, title: windows[i].title + "/fit-pin", workAreaWidth: workArea.width)
+                _ = setFrame(windows[i].element, appKitFrame: pinned, title: windows[i].title + "/fit-pin", workAreaWidth: workArea.width, workArea: workArea)
                 after = getAppKitFrame(windows[i].element) ?? pinned
             }
             x = min(maxX, floor(after.maxX))
@@ -586,13 +689,17 @@ final class WindowTiler {
     }
 
     /// Apply AX size/position. Pass 1: size→pos→size→pos; if still off, pass 2: pos→size→pos.
+    /// If still too wide, shrink-recovery: size at current x, then move, then size again
+    /// (Electron/Cursor often rejects size+move in one shot but accepts staged shrink — and
+    /// hand-drag proves equal half is reachable).
     /// Success requires position+width within tolerance (no longer treat "moved" alone as OK).
     @discardableResult
     private func setFrame(
         _ win: AXUIElement,
         appKitFrame: CGRect,
         title: String = "",
-        workAreaWidth: CGFloat = 0
+        workAreaWidth: CGFloat = 0,
+        workArea: CGRect? = nil
     ) -> SetFrameOutcome {
         let axFrame = WindowTiler.appKitToAX(appKitFrame)
         var origin = axFrame.origin
@@ -629,7 +736,8 @@ final class WindowTiler {
 
         usleep(30_000)
         var after = getAppKitFrame(win)
-        let tolW = max(2, (workAreaWidth > 0 ? workAreaWidth : max(appKitFrame.width, 1)) * Self.widthTolFraction)
+        let waW = workArea.map { $0.width } ?? workAreaWidth
+        let tolW = max(2, (waW > 0 ? waW : max(appKitFrame.width, 1)) * Self.widthTolFraction)
         let tolX: CGFloat = 2
 
         func closeEnough(_ a: CGRect) -> Bool {
@@ -649,12 +757,65 @@ final class WindowTiler {
             after = getAppKitFrame(win)
         }
 
+        // Shrink-recovery: width still too large — stage size at current x, then move, then size.
+        if let a = after, a.width > appKitFrame.width + tolW {
+            let minSize = axMinSize(win)
+            TilerLog.info(
+                "setFrame shrink-recovery title=\(title.prefix(32)) haveW=\(Int(a.width)) wantW=\(Int(appKitFrame.width)) "
+                + "minSize=\(minSize.map { "\(Int($0.width))x\(Int($0.height))" } ?? "n/a") "
+                + "workArea=\(workArea.map { "\(Int($0.minX)),\(Int($0.width))" } ?? "n/a")"
+            )
+            // Only skip recovery when AX reports a hard min wider than the target half.
+            let hardMin = (minSize?.width ?? 0) > appKitFrame.width + tolW
+            if !hardMin {
+                var wantSize = axFrame.size
+                if let sOnly = AXValueCreate(.cgSize, &wantSize) {
+                    _ = AXUIElementSetAttributeValue(win, kAXSizeAttribute as CFString, sOnly)
+                    _ = AXUIElementSetAttributeValue(win, kAXSizeAttribute as CFString, sOnly)
+                }
+                usleep(40_000)
+                var mid = getAppKitFrame(win) ?? a
+                // If still wide and we know workArea, size at a safe x that fits target width.
+                if mid.width > appKitFrame.width + tolW, let wa = workArea {
+                    let maxX = floor(wa.maxX)
+                    let minX = floor(wa.minX)
+                    let tw = max(1, floor(appKitFrame.width))
+                    let safeX = min(max(minX, floor(mid.origin.x)), max(minX, maxX - tw))
+                    let safeRect = CGRect(x: safeX, y: appKitFrame.minY, width: tw, height: appKitFrame.height)
+                    let safeAX = WindowTiler.appKitToAX(safeRect)
+                    var sOrigin = safeAX.origin
+                    var sSize = safeAX.size
+                    if let p = AXValueCreate(.cgPoint, &sOrigin), let s = AXValueCreate(.cgSize, &sSize) {
+                        _ = AXUIElementSetAttributeValue(win, kAXSizeAttribute as CFString, s)
+                        _ = AXUIElementSetAttributeValue(win, kAXPositionAttribute as CFString, p)
+                        _ = AXUIElementSetAttributeValue(win, kAXSizeAttribute as CFString, s)
+                    }
+                    usleep(40_000)
+                }
+                // Final: apply full target again size-first then pos-first.
+                result = apply(order: "size-first")
+                usleep(30_000)
+                after = getAppKitFrame(win)
+                if let b = after, !closeEnough(b) {
+                    result = apply(order: "pos-first")
+                    usleep(40_000)
+                    after = getAppKitFrame(win)
+                }
+            }
+        }
+
         if let a = after {
             let ok = closeEnough(a)
             if ok {
                 TilerLog.info("setFrame OK title=\(title.prefix(32)) target=\(appKitFrame) after=\(a) p=\(result.p.rawValue) s=\(result.s.rawValue)")
             } else {
-                TilerLog.error("setFrame MISS title=\(title.prefix(32)) target=\(appKitFrame) after=\(a) dx=\(a.origin.x - appKitFrame.origin.x) dw=\(a.width - appKitFrame.width) p=\(result.p.rawValue) s=\(result.s.rawValue)")
+                let minSize = axMinSize(win)
+                TilerLog.error(
+                    "setFrame MISS title=\(title.prefix(32)) target=\(appKitFrame) after=\(a) "
+                    + "dx=\(a.origin.x - appKitFrame.origin.x) dw=\(a.width - appKitFrame.width) "
+                    + "minSize=\(minSize.map { "\(Int($0.width))" } ?? "n/a") "
+                    + "p=\(result.p.rawValue) s=\(result.s.rawValue)"
+                )
             }
             return SetFrameOutcome(ok: ok, apiDisabled: false)
         }
@@ -667,6 +828,20 @@ final class WindowTiler {
             TilerLog.error("setFrame FAIL title=\(title.prefix(32)) target=\(appKitFrame) ax=\(axFrame) p=\(result.p.rawValue) s=\(result.s.rawValue)")
         }
         return SetFrameOutcome(ok: ok, apiDisabled: false)
+    }
+
+    /// Best-effort AX minimum size (many apps omit it).
+    private func axMinSize(_ win: AXUIElement) -> CGSize? {
+        var ref: CFTypeRef?
+        let attr = "AXMinSize" as CFString
+        guard AXUIElementCopyAttributeValue(win, attr, &ref) == .success,
+              let ref, CFGetTypeID(ref) == AXValueGetTypeID() else {
+            return nil
+        }
+        let val = ref as! AXValue
+        var size = CGSize.zero
+        guard AXValueGetValue(val, .cgSize, &size) else { return nil }
+        return size
     }
 
     // MARK: - Drag swap
