@@ -214,6 +214,8 @@ final class MenuBarController: NSObject {
             let next = currentStrategy().next()
             store.setStrategy(next)
             present(WindowTiler.shared.retile(strategy: next))
+        case .strategy1:
+            apply(.maximize)
         case .strategy2:
             apply(.twoHalves)
         case .strategy3:

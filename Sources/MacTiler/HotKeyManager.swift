@@ -7,6 +7,7 @@ final class HotKeyManager {
         case retile = 1
         case prevStrategy = 2
         case nextStrategy = 3
+        case strategy1 = 12         // maximize (PRD v1.3 ⌃⌥⌘1)
         case strategy2 = 4          // two-halves
         case strategy3 = 5          // three-thirds
         case strategy4 = 6          // quarters-quarters-half
@@ -43,6 +44,7 @@ final class HotKeyManager {
         register(Action.retile, keyCode: UInt32(kVK_ANSI_R), modifiers: mods)
         register(Action.prevStrategy, keyCode: UInt32(kVK_ANSI_LeftBracket), modifiers: mods)
         register(Action.nextStrategy, keyCode: UInt32(kVK_ANSI_RightBracket), modifiers: mods)
+        register(Action.strategy1, keyCode: UInt32(kVK_ANSI_1), modifiers: mods)
         register(Action.strategy2, keyCode: UInt32(kVK_ANSI_2), modifiers: mods)
         register(Action.strategy3, keyCode: UInt32(kVK_ANSI_3), modifiers: mods)
         register(Action.strategy4, keyCode: UInt32(kVK_ANSI_4), modifiers: mods)

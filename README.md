@@ -1,6 +1,6 @@
 # MacTiler
 
-macOS 原生菜单栏分屏（Swift + Accessibility）。对齐 **PRD v1.2**：五种**全竖条**策略 + 一键重排 + **拖窗互换**。不关 SIP；无 Electron；无跨桌面记忆；无命名档案。
+macOS 原生菜单栏分屏（Swift + Accessibility）。对齐 **PRD v1.3**：六种策略（**铺满** + 五种全竖条）+ 一键重排 + **拖窗互换**。不关 SIP；无 Electron；无跨桌面记忆；无命名档案。
 
 ## 编译运行
 
@@ -15,15 +15,18 @@ open build/Build/Products/Debug/MacTiler.app
 
 ## 策略（左→右竖条）
 
-菜单用**竖条线框图标**示意（PRD v1.2.1），不写分数主文案；旁注快捷键 ⌃⌥⌘2…6。状态栏图标随当前布局切换。
+菜单用**竖条线框图标**示意（PRD v1.3），不写分数主文案；旁注快捷键 ⌃⌥⌘1…6。状态栏图标随当前布局切换。
 
 | 快捷键 | 线框含义 | id |
 |--------|----------|-----|
+| ⌃⌥⌘1 | 铺满（满宽单条） | `maximize` |
 | ⌃⌥⌘2 | 两等分 | `two-halves` |
 | ⌃⌥⌘3 | 三等分 | `three-thirds` |
 | ⌃⌥⌘4 | 窄\|窄\|宽 | `quarters-quarters-half` |
 | ⌃⌥⌘5 | 宽\|窄\|窄 | `half-quarters-quarters` |
 | ⌃⌥⌘6 | 窄\|宽\|窄 | `quarter-half-quarter` |
+
+`maximize`：第 1 个可排窗 = 100% workArea；多窗时其余不动。与 `two-halves` 单窗「只占半槽、另半留空」区分清楚。
 
 已作废：`half-two-quarters`（半屏 + 上下两四分）。
 
@@ -33,7 +36,7 @@ open build/Build/Products/Debug/MacTiler.app
 |------|----|
 | 重排 | ⌃⌥⌘R |
 | 循环策略 | ⌃⌥⌘[ / ] |
-| 直选 | ⌃⌥⌘2…6 |
+| 直选 | ⌃⌥⌘1…6 |
 | 暂停 | ⌃⌥⌘P |
 
 ## 拖拽互换

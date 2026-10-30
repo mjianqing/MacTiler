@@ -22,7 +22,7 @@ xcodebuild \
   CODE_SIGN_STYLE=Manual \
   CODE_SIGN_IDENTITY="$IDENTITY" \
   DEVELOPMENT_TEAM="$TEAM" \
-  build | tee /tmp/mactiler-012-build.log | tail -30
+  build | tee /tmp/mactiler-013-build.log | tail -30
 
 test -d "$APP_SRC"
 

@@ -39,6 +39,7 @@ extension StrategyID {
     /// Left→right strip widths summing to 1.
     var stripFractions: [CGFloat] {
         switch self {
+        case .maximize: return [1.0]
         case .twoHalves: return [0.5, 0.5]
         case .threeThirds: return [1.0/3, 1.0/3, 1.0/3]
         case .quartersQuartersHalf: return [0.25, 0.25, 0.5]
@@ -50,6 +51,7 @@ extension StrategyID {
     /// Short menu title: hotkey only (no fractions). Icon carries the layout.
     var menuTitle: String {
         switch self {
+        case .maximize: return "⌃⌥⌘1"
         case .twoHalves: return "⌃⌥⌘2"
         case .threeThirds: return "⌃⌥⌘3"
         case .quartersQuartersHalf: return "⌃⌥⌘4"
@@ -60,6 +62,7 @@ extension StrategyID {
 
     var menuKeyEquivalent: String {
         switch self {
+        case .maximize: return "1"
         case .twoHalves: return "2"
         case .threeThirds: return "3"
         case .quartersQuartersHalf: return "4"
@@ -70,6 +73,7 @@ extension StrategyID {
 
     var accessibilityLabel: String {
         switch self {
+        case .maximize: return "铺满整屏"
         case .twoHalves: return "两等分竖条"
         case .threeThirds: return "三等分竖条"
         case .quartersQuartersHalf: return "窄窄宽竖条"

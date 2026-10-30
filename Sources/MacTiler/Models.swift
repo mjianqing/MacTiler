@@ -4,6 +4,7 @@ import ApplicationServices
 import Carbon.HIToolbox
 
 enum StrategyID: String, CaseIterable, Codable, Equatable {
+    case maximize = "maximize"                           // 100% workArea
     case twoHalves = "two-halves"
     case threeThirds = "three-thirds"
     case quartersQuartersHalf = "quarters-quarters-half" // 1/4 | 1/4 | 1/2
@@ -12,6 +13,7 @@ enum StrategyID: String, CaseIterable, Codable, Equatable {
 
     var displayName: String {
         switch self {
+        case .maximize: return "铺满"
         case .twoHalves: return "1/2 | 1/2"
         case .threeThirds: return "1/3 | 1/3 | 1/3"
         case .quartersQuartersHalf: return "1/4 | 1/4 | 1/2"
@@ -22,6 +24,7 @@ enum StrategyID: String, CaseIterable, Codable, Equatable {
 
     var maxWindows: Int {
         switch self {
+        case .maximize: return 1
         case .twoHalves: return 2
         default: return 3
         }

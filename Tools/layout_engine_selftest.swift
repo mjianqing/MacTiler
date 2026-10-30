@@ -4,14 +4,22 @@ import CoreGraphics
 
 // Minimal mirrors of StrategyID + LayoutEngine for offline verification.
 enum StrategyID: String {
+    case maximize = "maximize"
     case twoHalves = "two-halves"
     case threeThirds = "three-thirds"
     case quartersQuartersHalf = "quarters-quarters-half"
     case halfQuartersQuarters = "half-quarters-quarters"
     case quarterHalfQuarter = "quarter-half-quarter"
-    var maxWindows: Int { self == .twoHalves ? 2 : 3 }
+    var maxWindows: Int {
+        switch self {
+        case .maximize: return 1
+        case .twoHalves: return 2
+        default: return 3
+        }
+    }
     var stripFractions: [CGFloat] {
         switch self {
+        case .maximize: return [1.0]
         case .twoHalves: return [0.5, 0.5]
         case .threeThirds: return [1.0/3, 1.0/3, 1.0/3]
         case .quartersQuartersHalf: return [0.25, 0.25, 0.5]
@@ -27,7 +35,8 @@ struct LayoutEngine {
         guard windowCount > 0 else { return ([], strategy, nil) }
         var effective = strategy
         var overflow: Int? = nil
-        if windowCount == 2 && strategy != .twoHalves { effective = .twoHalves }
+        // Only 3-slot strategies degrade; maximize stays 1-slot full workArea.
+        if windowCount == 2 && strategy.maxWindows >= 3 { effective = .twoHalves }
         if windowCount > effective.maxWindows { overflow = effective.maxWindows }
         let allSlots = verticalStrips(workArea: workArea, fractions: effective.stripFractions)
         let count = min(windowCount, allSlots.count)
@@ -61,7 +70,26 @@ func check(_ name: String, _ ok: Bool) {
 
 let wa = CGRect(x: 0, y: 0, width: 1440, height: 900)
 
-// 1 window + two-halves → left half only, NOT full workArea
+// maximize: 1 window → full workArea
+let m1 = LayoutEngine.frames(strategy: .maximize, windowCount: 1, workArea: wa)
+check("1win maximize count=1", m1.frames.count == 1)
+check("1win maximize full W", approx(m1.frames[0].width, wa.width))
+check("1win maximize full H", approx(m1.frames[0].height, wa.height))
+check("1win maximize origin", approx(m1.frames[0].minX, wa.minX) && approx(m1.frames[0].minY, wa.minY))
+check("1win maximize no overflow", m1.overflowHint == nil)
+check("1win maximize effective", m1.effective == .maximize)
+
+// maximize: ≥2 windows → only first frame (=full); overflowHint=1; others not in frames
+let m2 = LayoutEngine.frames(strategy: .maximize, windowCount: 2, workArea: wa)
+check("2win maximize count=1", m2.frames.count == 1)
+check("2win maximize full", approx(m2.frames[0].width, wa.width))
+check("2win maximize overflow=1", m2.overflowHint == 1)
+check("2win maximize NOT halves", m2.effective == .maximize)
+
+let m3 = LayoutEngine.frames(strategy: .maximize, windowCount: 3, workArea: wa)
+check("3win maximize count=1", m3.frames.count == 1 && approx(m3.frames[0].width, wa.width) && m3.overflowHint == 1)
+
+// 1 window + two-halves → left half only, NOT full workArea (contrast maximize)
 let r1 = LayoutEngine.frames(strategy: .twoHalves, windowCount: 1, workArea: wa)
 check("1win two-halves count=1", r1.frames.count == 1)
 check("1win two-halves not full", !approx(r1.frames[0].width, wa.width) && approx(r1.frames[0].width, 720))

@@ -20,7 +20,8 @@ struct LayoutEngine {
         var effective = strategy
         var overflow: Int? = nil
         // With exactly 2 windows, 3-slot strategies degrade to two-halves.
-        if windowCount == 2 && strategy != .twoHalves {
+        // maximize (1 slot) must NOT degrade — only first window fills workArea.
+        if windowCount == 2 && strategy.maxWindows >= 3 {
             effective = .twoHalves
         }
         if windowCount > effective.maxWindows {
