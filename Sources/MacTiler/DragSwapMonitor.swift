@@ -15,6 +15,9 @@ final class DragSwapMonitor {
     private var sourceFrameAtDown = CGRect.zero
     private var maxDragDistance: CGFloat = 0
     private var highlightedTarget: AXUIElement?
+    /// Snapshot at mouse-down — avoid re-enumerating every app's AX windows on each drag tick
+    /// (AeroSpace lesson: AX on the main thread blocks; thrashing mid-drag feels janky).
+    private var dragWindowSnapshot: [ManagedWindow] = []
 
     /// Small travel before swap/highlight arms (filters clicks).
     private let minDragDistance: CGFloat = 12
@@ -56,6 +59,7 @@ final class DragSwapMonitor {
         sourceFrameAtDown = .zero
         maxDragDistance = 0
         highlightedTarget = nil
+        dragWindowSnapshot = []
         if clearHighlight {
             highlight.hide()
         }
@@ -94,8 +98,10 @@ final class DragSwapMonitor {
         sourceFrameAtDown = win.frame
         maxDragDistance = 0
         highlightedTarget = nil
+        // One AX collect for the whole drag; B's frame is stable until swap commit.
+        dragWindowSnapshot = WindowTiler.shared.listManageableWindows()
         highlight.hide()
-        TilerLog.info("drag-swap arm title-bar title=\(win.title.prefix(24))")
+        TilerLog.info("drag-swap arm title-bar title=\(win.title.prefix(24)) snap=\(dragWindowSnapshot.count)")
     }
 
     private func onMouseDragged(_ event: NSEvent) {
@@ -155,7 +161,14 @@ final class DragSwapMonitor {
         let point = Self.appKitMouseLocation()
         guard let target = windowUnderCursor(point: point, excluding: source) else { return }
 
-        _ = WindowTiler.shared.swapFrames(a: source, b: target.element)
+        // Pass A's frame at mouse-down — not A's live (dragged) frame.
+        TilerLog.info(
+            "drag-swap commit Aorig=\(Int(sourceFrameAtDown.minX)),\(Int(sourceFrameAtDown.minY)) "
+            + "\(Int(sourceFrameAtDown.width))x\(Int(sourceFrameAtDown.height)) "
+            + "B=\(Int(target.frame.minX)),\(Int(target.frame.minY)) "
+            + "\(Int(target.frame.width))x\(Int(target.frame.height))"
+        )
+        _ = WindowTiler.shared.swapFrames(a: source, b: target.element, aOriginalFrame: sourceFrameAtDown)
     }
 
     /// Left / right / bottom edges (and their corners) are resize grips.
@@ -217,7 +230,13 @@ final class DragSwapMonitor {
 
     /// Cursor in AppKit frame of a manageable window. Prefer frontmost/smaller among overlaps.
     private func windowUnderCursor(point: CGPoint, excluding: AXUIElement?) -> ManagedWindow? {
-        let windows = WindowTiler.shared.listManageableWindows()
+        // Mid-drag: reuse snapshot. Mouse-down (excluding==nil): live collect to arm.
+        let windows: [ManagedWindow]
+        if excluding != nil, !dragWindowSnapshot.isEmpty {
+            windows = dragWindowSnapshot
+        } else {
+            windows = WindowTiler.shared.listManageableWindows()
+        }
         let hits = windows.filter { win in
             if let excluding, CFEqual(win.element, excluding) { return false }
             return win.frame.contains(point)

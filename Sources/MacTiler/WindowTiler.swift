@@ -61,70 +61,71 @@ final class WindowTiler {
         var totalPlaced = 0
         var skipped = 0
         var overflow: Int? = nil
-        var screensTouched = 0
         var sawAPIDisabled = false
         var clampCompromised = false
         var hardFailReason: String? = nil
 
         var skippedNonResizable = 0
 
-        for screen in NSScreen.screens {
-            let onScreen = all.filter { windowBelongs(to: screen, frame: $0.frame) }
-            guard !onScreen.isEmpty else { continue }
-            screensTouched += 1
-
-            let ordered = onScreen.sorted { a, b in
-                if a.isFocused != b.isFocused { return a.isFocused && !b.isFocused }
-                return false
-            }
-
-            let workArea = screen.visibleFrame
-
-            // P1: drop fully non-resizable windows before slotting — avoid misleading half-layouts.
-            var candidates: [ManagedWindow] = []
-            for w in ordered {
-                if isFullyNonResizable(w, workArea: workArea) {
-                    skippedNonResizable += 1
-                    skipped += 1
-                    TilerLog.info("nonResizable skip title=\(w.title.prefix(24)) screen=\(screen.localizedName)")
-                } else {
-                    candidates.append(w)
-                }
-            }
-            guard !candidates.isEmpty else {
-                TilerLog.info("screen=\(screen.localizedName) all windows non-resizable; skip screen")
-                continue
-            }
-
-            let result = LayoutEngine.frames(
-                strategy: chosen,
-                windowCount: candidates.count,
-                workArea: workArea
-            )
-            if let max = result.overflowHint {
-                overflow = max
-            }
-
-            let toPlace = Array(candidates.prefix(result.frames.count))
-            let targets = result.frames
-            TilerLog.info("screen=\(screen.localizedName) visible=\(workArea) windows=\(onScreen.count) candidates=\(candidates.count) placing=\(toPlace.count) targets=\(targets.map { "w=\(Int($0.width))" })")
-
-            let screenResult = tileScreenRespectingMins(
-                windows: toPlace,
-                targets: targets,
-                workArea: workArea
-            )
-            if screenResult.apiDisabled { sawAPIDisabled = true }
-            totalPlaced += screenResult.placed
-            skipped += screenResult.skipped
-            if screenResult.clampCompromised { clampCompromised = true }
-            if let reason = screenResult.failReason {
-                hardFailReason = reason
-            }
+        // BRIEF/PRD: retile only the focus screen (focused window → mouse → main).
+        // Other screens stay untouched; each screen is independent when it becomes focus.
+        guard let screen = resolveFocusScreen(from: all) else {
+            return .info("没有可铺窗口落在焦点屏上")
+        }
+        let onScreen = all.filter { windowBelongs(to: screen, frame: $0.frame) }
+        guard !onScreen.isEmpty else {
+            return .info("没有可铺窗口落在焦点屏上")
         }
 
-        if screensTouched == 0 {
-            return .info("没有可铺窗口落在任何屏幕上")
+        // Focused first, then stable L→R (minX), then top→bottom — never shuffle slots.
+        let ordered = onScreen.sorted { a, b in
+            if a.isFocused != b.isFocused { return a.isFocused && !b.isFocused }
+            if abs(a.frame.minX - b.frame.minX) > 1 { return a.frame.minX < b.frame.minX }
+            return a.frame.minY > b.frame.minY
+        }
+
+        let workArea = screen.visibleFrame
+
+        // Drop fully non-resizable windows before slotting — avoid misleading half-layouts.
+        var candidates: [ManagedWindow] = []
+        for w in ordered {
+            if isFullyNonResizable(w, workArea: workArea) {
+                skippedNonResizable += 1
+                skipped += 1
+                TilerLog.info("nonResizable skip title=\(w.title.prefix(24)) screen=\(screen.localizedName)")
+            } else {
+                candidates.append(w)
+            }
+        }
+        guard !candidates.isEmpty else {
+            TilerLog.info("screen=\(screen.localizedName) all windows non-resizable; skip")
+            return .info("窗口无法调整尺寸，已跳过（未留下半布局）")
+        }
+
+        let result = LayoutEngine.frames(
+            strategy: chosen,
+            windowCount: candidates.count,
+            workArea: workArea
+        )
+        if let max = result.overflowHint {
+            overflow = max
+        }
+
+        let toPlace = Array(candidates.prefix(result.frames.count))
+        let targets = result.frames
+        TilerLog.info("focusScreen=\(screen.localizedName) visible=\(workArea) windows=\(onScreen.count) candidates=\(candidates.count) placing=\(toPlace.count) targets=\(targets.map { "w=\(Int($0.width))" })")
+
+        let screenResult = tileScreenRespectingMins(
+            windows: toPlace,
+            targets: targets,
+            workArea: workArea
+        )
+        if screenResult.apiDisabled { sawAPIDisabled = true }
+        totalPlaced += screenResult.placed
+        skipped += screenResult.skipped
+        if screenResult.clampCompromised { clampCompromised = true }
+        if let reason = screenResult.failReason {
+            hardFailReason = reason
         }
         if sawAPIDisabled {
             TilerLog.error("AX APIDisabled — TCC grant stale for this CDHash; toggle Accessibility for MacTiler")
@@ -379,7 +380,14 @@ final class WindowTiler {
         let after = getAppKitFrame(win.element) ?? before
         let unchanged = abs(after.width - before.width) <= 2
         let missed = abs(after.width - probeW) > tol
-        if unchanged && missed {
+        let nonResizable = unchanged && missed
+        // Always restore — probe must not leave the window parked at the test rect
+        // (esp. non-resizable: we skip tiling it next, so without restore it stays moved).
+        if abs(after.minX - before.minX) > 1 || abs(after.minY - before.minY) > 1
+            || abs(after.width - before.width) > 1 || abs(after.height - before.height) > 1 {
+            _ = setFrame(win.element, appKitFrame: before, title: win.title + "/probe-restore", workAreaWidth: workArea.width)
+        }
+        if nonResizable {
             TilerLog.info("nonResizable title=\(win.title.prefix(24)) beforeW=\(Int(before.width)) probeW=\(Int(probeW)) afterW=\(Int(after.width))")
             return true
         }
@@ -445,6 +453,10 @@ final class WindowTiler {
         for app in running {
             if app.bundleIdentifier == Bundle.main.bundleIdentifier { continue }
             let appEl = AXUIElementCreateApplication(app.processIdentifier)
+            // Soft AX timeout per app (public API). Avoids one hung app freezing the whole retile
+            // on the main thread — same class of fix AeroSpace pursued with thread-per-app (#131),
+            // but lighter: we stay single-threaded and just bound wait time.
+            AXUIElementSetMessagingTimeout(appEl, 1.0)
             var windowsRef: CFTypeRef?
             let copyErr = AXUIElementCopyAttributeValue(appEl, kAXWindowsAttribute as CFString, &windowsRef)
             guard copyErr == .success, let windowList = windowsRef as? [AXUIElement] else {
@@ -516,9 +528,19 @@ final class WindowTiler {
         return false
     }
 
-    private func screenContaining(_ appKitFrame: CGRect) -> NSScreen? {
-        let center = CGPoint(x: appKitFrame.midX, y: appKitFrame.midY)
-        return NSScreen.screens.first { NSMouseInRect(center, $0.frame, false) } ?? NSScreen.main
+    /// Focus screen for retile: screen of a focused manageable window, else mouse, else main.
+    private func resolveFocusScreen(from windows: [ManagedWindow]) -> NSScreen? {
+        if let focused = windows.first(where: { $0.isFocused }) {
+            let center = CGPoint(x: focused.frame.midX, y: focused.frame.midY)
+            if let s = NSScreen.screens.first(where: { NSMouseInRect(center, $0.frame, false) }) {
+                return s
+            }
+        }
+        let mouse = NSEvent.mouseLocation
+        if let s = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) {
+            return s
+        }
+        return NSScreen.main ?? NSScreen.screens.first
     }
 
     // MARK: - AX helpers
@@ -655,10 +677,18 @@ final class WindowTiler {
     }
 
     /// Swap position+size of two windows (AppKit frames → AX).
+    /// - Parameter aOriginalFrame: A's frame *before* the user dragged it. At mouse-up the OS has
+    ///   already moved A with the cursor; reading A's live frame would park B on that mid-drag
+    ///   rect instead of A's original tile slot (PRD drag-swap).
     @discardableResult
-    func swapFrames(a: AXUIElement, b: AXUIElement) -> Bool {
-        guard let frameA = getAppKitFrame(a), let frameB = getAppKitFrame(b) else { return false }
-        let okB = setFrame(b, appKitFrame: frameA, title: "swap-B").ok
+    func swapFrames(a: AXUIElement, b: AXUIElement, aOriginalFrame: CGRect) -> Bool {
+        guard let frameB = getAppKitFrame(b) else { return false }
+        // Capture B first (still unmoved), then put B into A's pre-drag slot, then A into B's slot.
+        TilerLog.info(
+            "swapFrames A→B slot=\(Int(frameB.minX)),\(Int(frameB.minY)) \(Int(frameB.width))x\(Int(frameB.height)) "
+            + "B→Aorig=\(Int(aOriginalFrame.minX)),\(Int(aOriginalFrame.minY)) \(Int(aOriginalFrame.width))x\(Int(aOriginalFrame.height))"
+        )
+        let okB = setFrame(b, appKitFrame: aOriginalFrame, title: "swap-B").ok
         let okA = setFrame(a, appKitFrame: frameB, title: "swap-A").ok
         return okA && okB
     }
