@@ -66,7 +66,7 @@ final class DragSwapMonitor {
     }
 
     private func onMouseDown(_ event: NSEvent) {
-        guard AccessibilityPermission.isTrusted(prompt: false) else { return }
+        guard AccessibilityPermission.isTrusted() else { return }
         if StrategyStore.shared.isPaused {
             reset(clearHighlight: true)
             return

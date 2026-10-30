@@ -35,7 +35,7 @@ final class WindowTiler {
 
     @discardableResult
     func retile(strategy: StrategyID? = nil) -> TilerMessage {
-        let trusted = AccessibilityPermission.isTrusted(prompt: false)
+        let trusted = AccessibilityPermission.isTrusted()
         TilerLog.info("retile begin trusted=\(trusted) paused=\(StrategyStore.shared.isPaused) strategy=\((strategy ?? StrategyStore.shared.currentStrategy).rawValue) screens=\(NSScreen.screens.count)")
 
         guard trusted else {

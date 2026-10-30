@@ -8,10 +8,13 @@ options:
 settings:
   base:
     DEVELOPMENT_TEAM: G2B4QZWQN7
-    CODE_SIGN_STYLE: Automatic
+    # Prefer stable Team Development over ad-hoc so TCC DR binds Team+identifier (not cdhash).
+    # No Developer ID Application cert on this Mac yet — Development is the stable local choice.
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "Apple Development"
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "0.1.11"
-    CURRENT_PROJECT_VERSION: "12"
+    MARKETING_VERSION: "0.1.12"
+    CURRENT_PROJECT_VERSION: "13"
     MACOSX_DEPLOYMENT_TARGET: "13.0"
 targets:
   MacTiler:
@@ -27,9 +30,12 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         LD_RUNPATH_SEARCH_PATHS: "@executable_path/../Frameworks"
         CODE_SIGN_ENTITLEMENTS: Resources/MacTiler.entitlements
-        # Ad-hoc DMG builds: Hardened Runtime + adhoc often breaks AX setFrame / TCC binding.
+        # Keep Hardened Runtime off for local Development builds (AX friendliness).
         ENABLE_HARDENED_RUNTIME: NO
         COMBINE_HIDPI_IMAGES: YES
+        DEVELOPMENT_TEAM: G2B4QZWQN7
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "Apple Development"
 schemes:
   MacTiler:
     build:

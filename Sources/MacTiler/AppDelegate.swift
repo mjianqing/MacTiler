@@ -14,7 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             TilerLog.info("UN authorization granted=\(granted) err=\(String(describing: err))")
         }
 
-        TilerLog.info("launch v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?") path=\(Bundle.main.bundlePath) trusted=\(AccessibilityPermission.isTrusted(prompt: false)) smoke=\(smokeRetileAndQuit)")
+        TilerLog.info("launch v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?") path=\(Bundle.main.bundlePath) trusted=\(AccessibilityPermission.isTrusted()) smoke=\(smokeRetileAndQuit)")
 
         menuBar = MenuBarController()
         autoRetileWatcher = AutoRetileWatcher()
@@ -22,15 +22,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         dragSwapMonitor = DragSwapMonitor()
         dragSwapMonitor?.start()
 
-        // Never prompt:true or unconditionally open Settings on launch.
-        // Ad-hoc re-sign flips CDHash → TCC list can look "on" while AXIsProcessTrusted is false.
-        if !AccessibilityPermission.isTrusted(prompt: false) {
-            NotificationPoster.post(
-                title: "需要辅助功能",
-                body: "开关看着开着也请关掉再打开 MacTiler"
-            )
-            AccessibilityPermission.openSystemSettingsIfNeeded()
-        }
+        // Silent check only. Tip ≤1× per CDHash/24h; never prompt:true on launch.
+        // Same Team + /Applications cover should keep AX; ad-hoc CDHash change still needs re-grant.
+        _ = AccessibilityPermission.nagOnLaunchIfNeeded()
+        TilerLog.info("AX sign=\(AccessibilityPermission.signingSummary())")
 
         if smokeRetileAndQuit {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
@@ -77,7 +72,7 @@ final class AutoRetileWatcher {
 
     private func schedule() {
         guard StrategyStore.shared.autoRetile, !StrategyStore.shared.isPaused else { return }
-        guard AccessibilityPermission.isTrusted(prompt: false) else { return }
+        guard AccessibilityPermission.isTrusted() else { return }
         workItem?.cancel()
         let item = DispatchWorkItem {
             // Auto-retile stays quiet on success to avoid notification spam;

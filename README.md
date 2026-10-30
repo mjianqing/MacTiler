@@ -44,7 +44,21 @@ open build/Build/Products/Debug/MacTiler.app
 
 ## 安装（DMG）
 
-1. 打开 `dist/MacTiler-0.1.4.dmg`，拖到「应用程序」。
+1. **只装一份**：打开 `dist/MacTiler-*.dmg`，拖到「应用程序」（`/Applications/MacTiler.app`）。不要从 Downloads / 挂载卷直接跑。
 2. 打开「应用程序 / MacTiler」（无 Dock 图标，看菜单栏右侧竖条线框）。
-3. **系统设置 → 隐私与安全性 → 辅助功能**：若列表里已有 MacTiler，先**关掉再打开**（换签/重装后 CDHash 变了必须重开）。
-4. 日志：`~/Library/Logs/MacTiler.log`（重排会写窗数与每个 setFrame 的 AXError）。
+3. **系统设置 → 隐私与安全性 → 辅助功能**：勾选 **MacTiler**（路径应是 `/Applications`）。
+4. **换包后**：同 Team（`G2B4QZWQN7`）覆盖安装一般**不必**重授。若开关已开仍提示无权限：先关掉 →「−」移除 → 退出 App → 再开并授权。高级：`tccutil reset Accessibility com.junmaly.mactiler`（需你自己在终端执行）。
+5. 截图用的「屏幕录制」与辅助功能分线，互不影响。
+6. 日志：`~/Library/Logs/MacTiler.log`。
+
+### 发版签发（本地）
+
+```bash
+./Scripts/package-dmg.sh
+```
+
+- 要求：钥匙串有 **Apple Development: junmaly@gmail.com (JP9BN6938U)**，Team `G2B4QZWQN7`。
+- 脚本拒绝打包 **ad-hoc**（`Signature=adhoc`）。
+- 本机暂无 **Developer ID Application**；对外公证/少 Gatekeeper 摩擦需 Anna 配置 Developer ID 后再改 identity。
+- `bundle id` 冻结：`com.junmaly.mactiler`（勿改正式版）。
+

@@ -48,7 +48,7 @@ final class MenuBarController: NSObject {
 
     /// Timer path: only rebuild when relevant state flipped (avoids rewriting NSMenu every 2s).
     private func refreshMenuIfNeeded() {
-        let trusted = AccessibilityPermission.isTrusted(prompt: false)
+        let trusted = AccessibilityPermission.isTrusted()
         let store = StrategyStore.shared
         let strategy = currentStrategy()
         let fp = menuFingerprint(trusted: trusted, store: store, strategy: strategy)
@@ -58,7 +58,7 @@ final class MenuBarController: NSObject {
 
     private func rebuildMenu() {
         let menu = NSMenu()
-        let trusted = AccessibilityPermission.isTrusted(prompt: false)
+        let trusted = AccessibilityPermission.isTrusted()
         let store = StrategyStore.shared
         let strategy = currentStrategy()
         lastMenuFingerprint = menuFingerprint(trusted: trusted, store: store, strategy: strategy)
@@ -79,15 +79,29 @@ final class MenuBarController: NSObject {
 
         menu.addItem(NSMenuItem.separator())
 
+        // Always show AX trusted truth (survey §4.7); actions only when untrusted.
+        let axStatus = NSMenuItem(
+            title: trusted ? "辅助功能：已授权 (trusted=true)" : "辅助功能：未授权 (trusted=false)",
+            action: nil,
+            keyEquivalent: ""
+        )
+        axStatus.isEnabled = false
+        menu.addItem(axStatus)
         if !trusted {
             let ax = NSMenuItem(title: "打开辅助功能设置…", action: #selector(openAccessibility), keyEquivalent: "")
             ax.target = self
             menu.addItem(ax)
+            let pathHint = NSMenuItem(title: "请勾选 /Applications/MacTiler", action: nil, keyEquivalent: "")
+            pathHint.isEnabled = false
+            menu.addItem(pathHint)
             let noAuth = NSMenuItem(title: "未授权：不会移动任何窗口", action: nil, keyEquivalent: "")
             noAuth.isEnabled = false
             menu.addItem(noAuth)
-            menu.addItem(NSMenuItem.separator())
+            let copy = NSMenuItem(title: "复制 tccutil 重置命令", action: #selector(copyTccutilReset), keyEquivalent: "")
+            copy.target = self
+            menu.addItem(copy)
         }
+        menu.addItem(NSMenuItem.separator())
 
         let retile = NSMenuItem(title: "按当前布局重排", action: #selector(retileNow), keyEquivalent: "r")
         retile.keyEquivalentModifierMask = [.control, .option, .command]
@@ -182,7 +196,7 @@ final class MenuBarController: NSObject {
             return
         }
 
-        guard AccessibilityPermission.isTrusted(prompt: false) else {
+        guard AccessibilityPermission.isTrusted() else {
             present(.needAccessibility)
             rebuildMenu()
             return
@@ -227,7 +241,7 @@ final class MenuBarController: NSObject {
     private func present(_ message: TilerMessage) {
         switch message {
         case .needAccessibility:
-            notify("需要辅助功能权限", "开关看着开着也请关掉再打开 MacTiler，然后重试。")
+            notify("需要「辅助功能」才能移动窗口", AccessibilityPermission.guidanceBody)
             AccessibilityPermission.openSystemSettingsIfNeeded()
         case .unsupportedWindow:
             notify("部分窗口无法调整", "已跳过不支持 set frame 的窗口。")
@@ -250,9 +264,14 @@ final class MenuBarController: NSObject {
     }
 
     @objc private func openAccessibility() {
-        // Explicit user action: allow prompt + open without throttle.
+        // Explicit user action only: open Settings + at most one system prompt per process.
         AccessibilityPermission.openSystemSettings()
-        _ = AccessibilityPermission.isTrusted(prompt: true)
+        _ = AccessibilityPermission.requestSystemPromptOnce()
+    }
+
+    @objc private func copyTccutilReset() {
+        AccessibilityPermission.copyTccutilResetToPasteboard()
+        notify("已复制", AccessibilityPermission.tccutilResetCommand + "（不会自动执行）")
     }
 
     @objc private func retileNow() {
